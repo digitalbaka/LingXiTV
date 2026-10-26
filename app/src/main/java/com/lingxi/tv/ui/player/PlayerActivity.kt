@@ -39,13 +39,14 @@ class PlayerActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_VIDEO_ID = "extra_video_id"
 
-        // 画面比例模式
+        // 画面比例模式（Media3 1.2.0 支持的模式）
         private val RESIZE_MODES = intArrayOf(
             AspectRatioFrameLayout.RESIZE_MODE_FIT,
             AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
-            AspectRatioFrameLayout.RESIZE_MODE_STRETCH
+            AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH,
+            AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
         )
-        private val RESIZE_MODE_LABELS = arrayOf("适应屏幕", "全屏裁剪", "拉伸全屏")
+        private val RESIZE_MODE_LABELS = arrayOf("适应屏幕", "全屏裁剪", "填满宽度", "填满高度")
     }
 
     private lateinit var playerView: PlayerView
