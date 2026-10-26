@@ -52,6 +52,24 @@
             android:screenOrientation="landscape"
             android:theme="@style/Theme.LingXiTV.NoActionBar" />
 
+        <activity
+            android:name=".ui.auth.LoginActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.LingXiTV.NoActionBar" />
+
+        <activity
+            android:name=".ui.node.NodeSelectActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.LingXiTV.NoActionBar" />
+
+        <activity
+            android:name=".ui.list.VideoListActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.LingXiTV.NoActionBar" />
+
     </application>
 
 </manifest>

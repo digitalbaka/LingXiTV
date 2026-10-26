@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.widget.Toast
 import androidx.leanback.app.BrowseSupportFragment
 import androidx.leanback.widget.ArrayObjectAdapter
 import androidx.leanback.widget.HeaderItem
@@ -15,7 +16,11 @@ import androidx.leanback.widget.OnItemViewSelectedListener
 import androidx.lifecycle.lifecycleScope
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
+import com.lingxi.tv.data.auth.AuthManager
 import com.lingxi.tv.data.model.Video
+import com.lingxi.tv.ui.auth.LoginActivity
+import com.lingxi.tv.ui.list.VideoListActivity
+import com.lingxi.tv.ui.node.NodeSelectActivity
 import com.lingxi.tv.ui.player.PlayerActivity
 import kotlinx.coroutines.launch
 
@@ -61,11 +66,15 @@ class MainBrowseFragment : BrowseSupportFragment() {
 
     private fun setupEventListeners() {
         onItemViewClickedListener = OnItemViewClickedListener { _, item, _, _ ->
-            val video = item as? Video ?: return@OnItemViewClickedListener
-            val intent = Intent(requireContext(), PlayerActivity::class.java).apply {
-                putExtra(PlayerActivity.EXTRA_VIDEO_ID, video.id)
+            when (item) {
+                is Video -> {
+                    val intent = Intent(requireContext(), PlayerActivity::class.java).apply {
+                        putExtra(PlayerActivity.EXTRA_VIDEO_ID, item.id)
+                    }
+                    startActivity(intent)
+                }
+                is MenuAction -> item.action.invoke()
             }
-            startActivity(intent)
         }
 
         onItemViewSelectedListener = OnItemViewSelectedListener { _, item, _, row ->
@@ -105,6 +114,17 @@ class MainBrowseFragment : BrowseSupportFragment() {
             addRow(HEADER_RECOMMEND, "推荐", sort = "hot")
             addRow(HEADER_NEWEST, "最新", sort = "new")
 
+            // 排行榜
+            addRow(HEADER_RANKING, "排行榜") { loadRanking() }
+
+            // 账号相关：历史、收藏、关注（需登录）
+            addRow(HEADER_HISTORY, "历史记录") { loadUserContent(VideoListActivity.TYPE_HISTORY) }
+            addRow(HEADER_FAVORITES, "我的收藏") { loadUserContent(VideoListActivity.TYPE_FAVORITES) }
+            addRow(HEADER_FOLLOWING, "关注动态") { loadUserContent(VideoListActivity.TYPE_FOLLOWING) }
+
+            // 账号入口行（登录/退出、节点切换）
+            addAccountRow()
+
             val result = repository.getPartitions()
             result.onSuccess { pageData ->
                 pageData.items.forEachIndexed { index, partition ->
@@ -120,6 +140,70 @@ class MainBrowseFragment : BrowseSupportFragment() {
         }
     }
 
+    /** 添加账号入口行 */
+    private fun addAccountRow() {
+        val headerItem = HeaderItem(HEADER_ACCOUNT, "账号")
+        val adapter = ArrayObjectAdapter(MenuActionPresenter())
+        val user = AuthManager.user
+        if (AuthManager.isLoggedIn && user != null) {
+            adapter.add(MenuAction("当前用户：${user.nickname.ifEmpty { user.username }}") {})
+            adapter.add(MenuAction("切换节点（当前：${AuthManager.nodeName ?: "主站"}）") {
+                startActivity(Intent(requireContext(), NodeSelectActivity::class.java))
+            })
+            adapter.add(MenuAction("退出登录") {
+                AuthManager.logout()
+                Toast.makeText(requireContext(), "已退出登录", Toast.LENGTH_SHORT).show()
+            })
+        } else {
+            adapter.add(MenuAction("点击登录") {
+                startActivity(Intent(requireContext(), LoginActivity::class.java))
+            })
+            adapter.add(MenuAction("切换节点（当前：${AuthManager.nodeName ?: "主站"}）") {
+                startActivity(Intent(requireContext(), NodeSelectActivity::class.java))
+            })
+        }
+        rowsAdapter.add(ListRow(headerItem, adapter))
+    }
+
+    /** 加载排行榜 */
+    private fun loadRanking() {
+        val listRow = findListRowByHeaderId(HEADER_RANKING) ?: return
+        val innerAdapter = listRow.adapter as? ArrayObjectAdapter ?: return
+        lifecycleScope.launch {
+            val result = repository.getRanking()
+            result.onSuccess { pageData ->
+                pageData.items.filter { it.isVideo }.forEach { innerAdapter.add(it) }
+            }.onFailure {
+                Log.e(TAG, "loadRanking failed", it)
+            }
+        }
+    }
+
+    /** 加载用户内容（历史/收藏/关注） */
+    private fun loadUserContent(type: String) {
+        val headerId = when (type) {
+            VideoListActivity.TYPE_HISTORY -> HEADER_HISTORY
+            VideoListActivity.TYPE_FAVORITES -> HEADER_FAVORITES
+            VideoListActivity.TYPE_FOLLOWING -> HEADER_FOLLOWING
+            else -> return
+        }
+        val listRow = findListRowByHeaderId(headerId) ?: return
+        val innerAdapter = listRow.adapter as? ArrayObjectAdapter ?: return
+        if (!AuthManager.isLoggedIn) return
+        lifecycleScope.launch {
+            val result = when (type) {
+                VideoListActivity.TYPE_HISTORY -> repository.getHistory()
+                VideoListActivity.TYPE_FAVORITES -> repository.getFavorites()
+                else -> repository.getFollowingVideos()
+            }
+            result.onSuccess { pageData ->
+                pageData.items.filter { it.isVideo }.forEach { innerAdapter.add(it) }
+            }.onFailure {
+                Log.e(TAG, "loadUserContent($type) failed", it)
+            }
+        }
+    }
+
     private fun findListRowByHeaderId(headerId: Long): ListRow? {
         for (i in 0 until rowsAdapter.size()) {
             val row = rowsAdapter.get(i) as? ListRow ?: continue
@@ -128,14 +212,25 @@ class MainBrowseFragment : BrowseSupportFragment() {
         return null
     }
 
-    private fun addRow(headerId: Long, name: String, sort: String? = null, partition: String? = null) {
+    private fun addRow(
+        headerId: Long,
+        name: String,
+        sort: String? = null,
+        partition: String? = null,
+        onLoaded: (() -> Unit)? = null
+    ) {
         val headerItem = HeaderItem(headerId, name)
         val listRowAdapter = ArrayObjectAdapter(VideoCardPresenter())
         val listRow = ListRow(headerItem, listRowAdapter)
         rowsAdapter.add(listRow)
 
-        pageStates[headerId] = PageState(sort = sort, partition = partition)
-        loadPage(listRow, headerId)
+        if (onLoaded != null) {
+            // 自定义加载（排行榜/历史/收藏/关注）
+            onLoaded.invoke()
+        } else {
+            pageStates[headerId] = PageState(sort = sort, partition = partition)
+            loadPage(listRow, headerId)
+        }
     }
 
     private fun loadPage(row: ListRow, headerId: Long) {
@@ -192,7 +287,15 @@ class MainBrowseFragment : BrowseSupportFragment() {
         private const val TAG = "LingXiBrowse"
         private const val HEADER_RECOMMEND = 1L
         private const val HEADER_NEWEST = 2L
+        private const val HEADER_ACCOUNT = 50L
+        private const val HEADER_RANKING = 60L
+        private const val HEADER_HISTORY = 61L
+        private const val HEADER_FAVORITES = 62L
+        private const val HEADER_FOLLOWING = 63L
         private const val HEADER_PARTITION_START = 100L
         private const val PAGE_SIZE = 30
     }
+
+    /** 菜单项（登录/节点等入口） */
+    internal data class MenuAction(val label: String, val action: () -> Unit)
 }

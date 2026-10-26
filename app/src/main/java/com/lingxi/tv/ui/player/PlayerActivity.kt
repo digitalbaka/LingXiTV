@@ -15,7 +15,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
-import com.lingxi.tv.data.api.ApiClient
+import com.lingxi.tv.data.auth.AuthManager
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoQuality
 import com.lingxi.tv.player.DanmakuView
@@ -109,7 +109,7 @@ class PlayerActivity : AppCompatActivity() {
         currentQualityIndex = qualityList.indexOfFirst { it.height == 720 }
         if (currentQualityIndex < 0) currentQualityIndex = 0
 
-        val videoUrl = getCurrentQualityUrl() ?: video.getFullSrcUrl(ApiClient.BASE_URL)
+        val videoUrl = getCurrentQualityUrl() ?: video.getFullSrcUrl(AuthManager.getPlaybackBaseUrl())
 
         player = ExoPlayer.Builder(this).build().also { exoPlayer ->
             playerView.player = exoPlayer
@@ -154,7 +154,7 @@ class PlayerActivity : AppCompatActivity() {
         if (retryCount < maxRetryCount) {
             retryCount++
             Toast.makeText(this, "播放出错，第 $retryCount 次重试...", Toast.LENGTH_SHORT).show()
-            val url = getCurrentQualityUrl() ?: video?.getFullSrcUrl(ApiClient.BASE_URL) ?: return
+            val url = getCurrentQualityUrl() ?: video?.getFullSrcUrl(AuthManager.getPlaybackBaseUrl()) ?: return
             exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
             exoPlayer.prepare()
             exoPlayer.seekTo(position)
@@ -180,7 +180,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun getCurrentQualityUrl(): String? {
-        return qualityList.getOrNull(currentQualityIndex)?.getFullUrl(ApiClient.BASE_URL)
+        return qualityList.getOrNull(currentQualityIndex)?.getFullUrl(AuthManager.getPlaybackBaseUrl())
     }
 
     /**

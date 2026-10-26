@@ -1,7 +1,11 @@
 package com.lingxi.tv.data.repository
 
 import com.lingxi.tv.data.api.ApiClient
+import com.lingxi.tv.data.model.ActionResult
+import com.lingxi.tv.data.model.Captcha
 import com.lingxi.tv.data.model.DanmakuList
+import com.lingxi.tv.data.model.GatewayInfo
+import com.lingxi.tv.data.model.LoginResult
 import com.lingxi.tv.data.model.PageData
 import com.lingxi.tv.data.model.Partition
 import com.lingxi.tv.data.model.SearchResult
@@ -102,5 +106,109 @@ class VideoRepository {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    // ==================== 排行榜 ====================
+
+    suspend fun getRanking(): Result<PageData<Video>> {
+        return try {
+            val resp = api.getRanking()
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取排行榜失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // ==================== 认证 ====================
+
+    suspend fun getCaptcha(): Result<Captcha> {
+        return try {
+            val resp = api.getCaptcha()
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取验证码失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun login(username: String, password: String): Result<LoginResult> {
+        return try {
+            val resp = api.login(username, password)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "登录失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun sendEmailCode(email: String?, captchaId: String, captchaCode: String): Result<ActionResult> {
+        return try {
+            val resp = api.sendEmailCode(email, captchaId, captchaCode)
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true, "已发送"))
+            else Result.failure(Exception(resp.message.ifEmpty { "发送失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun verify2fa(code: String, remember: Boolean = true): Result<LoginResult> {
+        return try {
+            val resp = api.verify2fa(code, remember)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "验证失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun logout(): Result<ActionResult> {
+        return try {
+            val resp = api.logout()
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
+            else Result.failure(Exception(resp.message.ifEmpty { "退出失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // ==================== 节点 ====================
+
+    suspend fun getGatewayNodes(): Result<GatewayInfo> {
+        return try {
+            val resp = api.getGatewayNodes()
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取节点失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // ==================== 用户内容 ====================
+
+    suspend fun getHistory(page: Int = 1, pageSize: Int = 20): Result<PageData<Video>> {
+        return try {
+            val resp = api.getHistory(page, pageSize)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取历史记录失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun getFavorites(page: Int = 1, pageSize: Int = 20): Result<PageData<Video>> {
+        return try {
+            val resp = api.getFavorites(page, pageSize)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取收藏失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun getFollowingVideos(page: Int = 1, pageSize: Int = 20): Result<PageData<Video>> {
+        return try {
+            val resp = api.getFollowingVideos(page, pageSize)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取关注动态失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun toggleFavorite(videoId: Long): Result<ActionResult> {
+        return try {
+            val resp = api.toggleFavorite(videoId)
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
+            else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun toggleFollow(uid: Long): Result<ActionResult> {
+        return try {
+            val resp = api.toggleFollow(uid)
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
+            else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
+        } catch (e: Exception) { Result.failure(e) }
     }
 }

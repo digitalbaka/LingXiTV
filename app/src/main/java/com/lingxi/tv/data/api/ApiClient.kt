@@ -2,6 +2,7 @@ package com.lingxi.tv.data.api
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.lingxi.tv.data.auth.AuthManager
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -33,6 +34,17 @@ object ApiClient {
             .writeTimeout(WRITE_TIMEOUT, TimeUnit.SECONDS)
             // 连接池复用，减少内存分配
             .connectionPool(okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES))
+            // 自动附加 Authorization 头
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val token = AuthManager.token
+                val request = if (!token.isNullOrEmpty() && original.header("Authorization") == null) {
+                    original.newBuilder()
+                        .header("Authorization", "Bearer $token")
+                        .build()
+                } else original
+                chain.proceed(request)
+            }
 
         builder.build()
     }
