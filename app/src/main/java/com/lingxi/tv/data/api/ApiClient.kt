@@ -13,6 +13,9 @@ import java.util.concurrent.TimeUnit
  */
 object ApiClient {
 
+    /** 服务器基础地址，供 UI 层拼接封面/视频完整 URL 使用 */
+    const val BASE_URL = ApiService.BASE_URL
+
     private const val CONNECT_TIMEOUT = 15L
     private const val READ_TIMEOUT = 30L
     private const val WRITE_TIMEOUT = 30L
