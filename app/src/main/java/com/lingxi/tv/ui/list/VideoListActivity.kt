@@ -72,6 +72,12 @@ class VideoListActivity : FragmentActivity() {
         loadData()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        // 内存优化：清空适配器，释放视频卡片引用
+        rowsAdapter.clear()
+    }
+
     private fun loadData() {
         // 历史/收藏/关注需要登录
         if (type != TYPE_RANKING && !AuthManager.isLoggedIn) {

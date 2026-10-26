@@ -2,7 +2,9 @@ package com.lingxi.tv.ui.auth
 
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -56,11 +58,29 @@ class LoginActivity : AppCompatActivity() {
         wvCaptcha.settings.javaScriptEnabled = false
         wvCaptcha.settings.loadWithOverviewMode = true
         wvCaptcha.settings.useWideViewPort = true
+        // 内存优化：禁用缓存、DOM 存储、数据库，验证码不需要持久化
+        wvCaptcha.settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
+        wvCaptcha.settings.domStorageEnabled = false
+        wvCaptcha.settings.databaseEnabled = false
+        wvCaptcha.webViewClient = WebViewClient()
+        wvCaptcha.isVerticalScrollBarEnabled = false
+        wvCaptcha.isHorizontalScrollBarEnabled = false
 
         findViewById<Button>(R.id.btnLogin).setOnClickListener { doLogin() }
         findViewById<Button>(R.id.btnRefreshCaptcha).setOnClickListener { loadCaptcha() }
         findViewById<Button>(R.id.btnSendCode).setOnClickListener { sendCode() }
         findViewById<Button>(R.id.btnVerify).setOnClickListener { verify() }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // 内存优化：WebView 必须显式销毁，否则泄露大量内存
+        wvCaptcha.stopLoading()
+        wvCaptcha.loadUrl("about:blank")
+        wvCaptcha.clearHistory()
+        (wvCaptcha.parent as? ViewGroup)?.removeView(wvCaptcha)
+        wvCaptcha.destroy()
+        captcha = null
     }
 
     private fun setStatus(msg: String) {

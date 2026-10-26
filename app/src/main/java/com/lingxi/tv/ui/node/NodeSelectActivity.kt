@@ -94,6 +94,13 @@ class NodeSelectActivity : AppCompatActivity() {
         adapter.setData(nodes, 0)
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        // 内存优化：解除 RecyclerView 对 Adapter 的引用，避免 Activity 泄露
+        rvNodes.adapter = null
+        nodes = emptyList()
+    }
+
     // ==================== Adapter ====================
 
     inner class NodeAdapter(private val onSelect: (GatewayNode) -> Unit) :

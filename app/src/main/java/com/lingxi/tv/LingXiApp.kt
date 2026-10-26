@@ -1,6 +1,8 @@
 package com.lingxi.tv
 
 import android.app.Application
+import android.content.ComponentCallbacks2
+import com.bumptech.glide.Glide
 import com.lingxi.tv.data.repository.VideoRepository
 
 /**
@@ -20,5 +22,23 @@ class LingXiApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+    }
+
+    /**
+     * 内存优化：系统低内存时清理 Glide 图片缓存，避免 OOM
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            Glide.get(this).clearMemory()
+        }
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
+            Thread {
+                try {
+                    Glide.get(this).clearDiskCache()
+                } catch (_: Exception) {
+                }
+            }.start()
+        }
     }
 }
