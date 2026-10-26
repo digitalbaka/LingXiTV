@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="lingxi_green">#1a8a5c</color>
+    <color name="lingxi_green_dark">#127049</color>
+    <color name="lingxi_green_light">#2eb87c</color>
+    <color name="black">#000000</color>
+    <color name="white">#FFFFFF</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B0B0B0</color>
+    <color name="bg_dark">#121212</color>
+    <color name="card_bg">#1E1E1E</color>
+    <color name="accent">#1a8a5c</color>
+</resources>

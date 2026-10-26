@@ -1,0 +1,23 @@
+// Top-level build file
+buildscript {
+    ext {
+        kotlin_version = '1.9.22'
+        agp_version = '7.4.2'
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:$agp_version"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+allprojects {
+    // nothing
+}
+
+tasks.register('clean', Delete) {
+    delete rootProject.buildDir
+}
