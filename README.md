@@ -62,6 +62,7 @@ adb install -r app-release.apk
 - **弹幕对象池**复用 `DanmakuItem`，降低 GC 频率
 - Glide 加载封面时 override 到卡片尺寸，避免大图占用内存
 - 分区列表内存缓存 5 分钟，减少重复网络请求
+- 视频列表分页加载（每页 30 条），滚动到行尾自动加载下一页
 - 播放页 `onDestroy` 释放 ExoPlayer，协程随生命周期自动取消
 - 不申请大堆内存（`largeHeap=false`）
 

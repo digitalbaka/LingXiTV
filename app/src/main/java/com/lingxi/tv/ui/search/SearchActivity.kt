@@ -58,7 +58,7 @@ class SearchActivity : FragmentActivity(), SearchSupportFragment.SearchResultPro
         }
 
         // 选中接近末尾时加载下一页
-        searchFragment.setOnItemViewSelectedListener { _, item, row, _ ->
+        searchFragment.setOnItemViewSelectedListener { _, item, _, row ->
             val video = item as? Video ?: return@setOnItemViewSelectedListener
             val listRow = row as? ListRow ?: return@setOnItemViewSelectedListener
             val adapter = listRow.adapter as? ArrayObjectAdapter ?: return@setOnItemViewSelectedListener

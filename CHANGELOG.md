@@ -1,5 +1,18 @@
 # 更新日志
 
+## v1.4.0 (2026-10-27)
+
+分页加载根本修复版本。
+
+### 修复
+
+- 🐛 **分页加载始终不生效（根因修复）**：`OnItemViewSelectedListener` 的 lambda 参数顺序写错——`onItemSelected(itemViewHolder, item, rowViewHolder, row)` 第 3 个参数是 `rowViewHolder`（`RowPresenter.ViewHolder` 类型），第 4 个才是 `row`（`Row` 类型）。代码误将第 3 个参数命名为 `row`，导致 `row as? ListRow` 永远返回 null，分页永不触发。已修正为 `{ _, item, _, row ->`
+- 🐛 **搜索结果分页同样不生效**：与主界面相同的参数顺序错误，一并修复
+
+### 验证
+
+- ✅ 电视端实测：滚动到推荐行末尾自动加载下一页，`loadPage: loading page=5, added=6, total=94`
+
 ## v1.3.0 (2026-10-27)
 
 分页加载修复与构建兼容性版本。

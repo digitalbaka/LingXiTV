@@ -3,6 +3,7 @@ package com.lingxi.tv.ui.main
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import androidx.leanback.app.BrowseSupportFragment
 import androidx.leanback.widget.ArrayObjectAdapter
@@ -11,7 +12,6 @@ import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.ListRowPresenter
 import androidx.leanback.widget.OnItemViewClickedListener
 import androidx.leanback.widget.OnItemViewSelectedListener
-import androidx.leanback.widget.Row
 import androidx.lifecycle.lifecycleScope
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
@@ -28,7 +28,6 @@ class MainBrowseFragment : BrowseSupportFragment() {
     private lateinit var rowsAdapter: ArrayObjectAdapter
     private val repository = LingXiApp.get().repository
 
-    // 每行的分页状态
     private data class PageState(
         var currentPage: Int = 1,
         var hasMore: Boolean = true,
@@ -40,6 +39,7 @@ class MainBrowseFragment : BrowseSupportFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        Log.d(TAG, "onViewCreated")
         setupUI()
         setupEventListeners()
         loadData()
@@ -68,19 +68,36 @@ class MainBrowseFragment : BrowseSupportFragment() {
             startActivity(intent)
         }
 
-        // 选中项接近行尾时自动加载下一页
-        onItemViewSelectedListener = OnItemViewSelectedListener { _, item, row, _ ->
-            val video = item as? Video ?: return@OnItemViewSelectedListener
-            val listRow = row as? ListRow ?: return@OnItemViewSelectedListener
-            val headerId = listRow.headerItem.id
-            val innerAdapter = listRow.adapter as? ArrayObjectAdapter ?: return@OnItemViewSelectedListener
+        onItemViewSelectedListener = OnItemViewSelectedListener { _, item, _, row ->
+            val video = item as? Video
+            if (video == null) {
+                return@OnItemViewSelectedListener
+            }
+            // row 可能不是 ListRow 类型，通过 headerId 从 rowsAdapter 中查找
+            val headerId = row?.headerItem?.id
+            if (headerId == null) {
+                Log.d(TAG, "onItemSelected: headerId is null")
+                return@OnItemViewSelectedListener
+            }
+            val listRow = findListRowByHeaderId(headerId)
+            if (listRow == null) {
+                Log.d(TAG, "onItemSelected: ListRow not found for headerId=$headerId")
+                return@OnItemViewSelectedListener
+            }
+            val innerAdapter = listRow.adapter as? ArrayObjectAdapter
+            if (innerAdapter == null) {
+                Log.d(TAG, "onItemSelected: innerAdapter is null")
+                return@OnItemViewSelectedListener
+            }
             val position = innerAdapter.indexOf(video)
             val total = innerAdapter.size()
-            // 当选中倒数第 3 个以内时，触发加载下一页
+            Log.d(TAG, "onItemSelected: headerId=$headerId, position=$position, total=$total")
             if (total > 0 && position >= total - 3) {
+                Log.d(TAG, "onItemSelected: near end, triggering loadPage for headerId=$headerId")
                 loadPage(listRow, headerId)
             }
         }
+        Log.d(TAG, "setupEventListeners: listeners set")
     }
 
     private fun loadData() {
@@ -97,8 +114,18 @@ class MainBrowseFragment : BrowseSupportFragment() {
                         partition = partition.slug
                     )
                 }
+            }.onFailure {
+                Log.e(TAG, "loadData: getPartitions failed", it)
             }
         }
+    }
+
+    private fun findListRowByHeaderId(headerId: Long): ListRow? {
+        for (i in 0 until rowsAdapter.size()) {
+            val row = rowsAdapter.get(i) as? ListRow ?: continue
+            if (row.headerItem.id == headerId) return row
+        }
+        return null
     }
 
     private fun addRow(headerId: Long, name: String, sort: String? = null, partition: String? = null) {
@@ -111,15 +138,29 @@ class MainBrowseFragment : BrowseSupportFragment() {
         loadPage(listRow, headerId)
     }
 
-    /**
-     * 加载一页视频数据
-     */
     private fun loadPage(row: ListRow, headerId: Long) {
-        val state = pageStates[headerId] ?: return
-        if (!state.hasMore || state.loading) return
+        val state = pageStates[headerId]
+        if (state == null) {
+            Log.d(TAG, "loadPage: no state for headerId=$headerId")
+            return
+        }
+        if (!state.hasMore) {
+            Log.d(TAG, "loadPage: no more for headerId=$headerId")
+            return
+        }
+        if (state.loading) {
+            Log.d(TAG, "loadPage: already loading for headerId=$headerId")
+            return
+        }
         state.loading = true
+        Log.d(TAG, "loadPage: loading page=${state.currentPage} for headerId=$headerId, sort=${state.sort}, partition=${state.partition}")
 
-        val innerAdapter = row.adapter as? ArrayObjectAdapter ?: return
+        val innerAdapter = row.adapter as? ArrayObjectAdapter
+        if (innerAdapter == null) {
+            Log.d(TAG, "loadPage: innerAdapter is null")
+            state.loading = false
+            return
+        }
 
         lifecycleScope.launch {
             try {
@@ -135,18 +176,11 @@ class MainBrowseFragment : BrowseSupportFragment() {
                         innerAdapter.add(video)
                     }
                     val addedCount = innerAdapter.size() - beforeSize
-                    // 双重判断 hasMore：API 字段 + 已加载数量 vs 总数
                     state.hasMore = pageData.hasMore && innerAdapter.size() < pageData.total
                     state.currentPage++
-                    // 强制刷新行视图，确保 Leanback HorizontalGridView 显示新增项
-                    if (addedCount > 0) {
-                        val rowIndex = rowsAdapter.indexOf(row)
-                        if (rowIndex >= 0) {
-                            rowsAdapter.notifyItemRangeChanged(rowIndex, 1)
-                        }
-                    }
+                    Log.d(TAG, "loadPage: headerId=$headerId added=$addedCount, total=${innerAdapter.size()}, hasMore=${state.hasMore}, nextPage=${state.currentPage}")
                 }.onFailure {
-                    // 单次失败不终止分页，仅重置 loading 允许下次重试
+                    Log.e(TAG, "loadPage: headerId=$headerId failed", it)
                 }
             } finally {
                 state.loading = false
@@ -155,6 +189,7 @@ class MainBrowseFragment : BrowseSupportFragment() {
     }
 
     companion object {
+        private const val TAG = "LingXiBrowse"
         private const val HEADER_RECOMMEND = 1L
         private const val HEADER_NEWEST = 2L
         private const val HEADER_PARTITION_START = 100L
