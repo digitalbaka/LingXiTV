@@ -59,6 +59,8 @@ class PlayerActivity : AppCompatActivity() {
     private var currentQualityIndex: Int = 0
     private var qualityList: List<VideoQuality> = emptyList()
     private var currentResizeMode: Int = 0
+    private var retryCount: Int = 0
+    private var maxRetryCount: Int = 3
 
     private var progressUpdateJob: Job? = null
     private var optionsDialog: AlertDialog? = null
@@ -130,7 +132,48 @@ class PlayerActivity : AppCompatActivity() {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     danmakuView.setPlaying(isPlaying)
                 }
+
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    handlePlaybackError(error)
+                }
             })
+        }
+    }
+
+    /**
+     * 处理播放错误（如 502）：先重试当前清晰度，再降级到其他清晰度
+     */
+    private fun handlePlaybackError(error: androidx.media3.common.PlaybackException) {
+        val exoPlayer = player ?: return
+        val errorMsg = error.localizedMessage ?: "未知错误"
+        val position = exoPlayer.currentPosition
+
+        // 先重试当前清晰度
+        if (retryCount < maxRetryCount) {
+            retryCount++
+            Toast.makeText(this, "播放出错，第 $retryCount 次重试...", Toast.LENGTH_SHORT).show()
+            val url = getCurrentQualityUrl() ?: video?.getFullSrcUrl(ApiClient.BASE_URL) ?: return
+            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
+            exoPlayer.prepare()
+            exoPlayer.seekTo(position)
+            exoPlayer.playWhenReady = true
+            return
+        }
+
+        // 重试失败，尝试降级到其他清晰度
+        retryCount = 0
+        val fallbackIndex = qualityList.indices.firstOrNull { it != currentQualityIndex }
+        if (fallbackIndex != null) {
+            currentQualityIndex = fallbackIndex
+            val fallbackLabel = qualityList[fallbackIndex].label
+            Toast.makeText(this, "当前清晰度不可用，切换到 $fallbackLabel", Toast.LENGTH_LONG).show()
+            val url = getCurrentQualityUrl() ?: return
+            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
+            exoPlayer.prepare()
+            exoPlayer.seekTo(position)
+            exoPlayer.playWhenReady = true
+        } else {
+            Toast.makeText(this, "播放失败: $errorMsg", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -146,6 +189,7 @@ class PlayerActivity : AppCompatActivity() {
         val exoPlayer = player ?: return
         val position = exoPlayer.currentPosition
         currentQualityIndex = index
+        retryCount = 0 // 手动切换时重置重试计数
 
         val url = getCurrentQualityUrl() ?: return
         exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
@@ -179,6 +223,10 @@ class PlayerActivity : AppCompatActivity() {
      * 显示设置菜单：清晰度、画面比例、弹幕开关
      */
     private fun showOptionsDialog() {
+        // 已有对话框则不重复弹出
+        optionsDialog?.let {
+            if (it.isShowing) return
+        }
         val options = mutableListOf<String>()
         options.add("清晰度: ${qualityList.getOrNull(currentQualityIndex)?.label ?: "默认"}")
         options.add("画面比例: ${RESIZE_MODE_LABELS[currentResizeMode]}")
@@ -244,6 +292,22 @@ class PlayerActivity : AppCompatActivity() {
         progressUpdateJob = null
     }
 
+    /**
+     * 使用 dispatchKeyEvent 在 View 层拦截之前捕获按键，
+     * 避免 PlayerView 的播放控制器吞掉菜单键/上键
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_DPAD_UP -> {
+                    showOptionsDialog()
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
@@ -274,11 +338,6 @@ class PlayerActivity : AppCompatActivity() {
             }
             KeyEvent.KEYCODE_MEDIA_PAUSE -> {
                 player?.pause()
-                return true
-            }
-            // 菜单键 / 上键：打开播放设置菜单
-            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_DPAD_UP -> {
-                showOptionsDialog()
                 return true
             }
         }

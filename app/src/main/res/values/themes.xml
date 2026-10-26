@@ -18,6 +18,14 @@
     <style name="Theme.LingXiTV.Player" parent="Theme.LingXiTV.NoActionBar">
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowContentOverlay">@null</item>
+        <!-- 显式指定对话框主题，避免 Leanback 主题未定义 alertDialogTheme 导致 Resource ID #0x0 崩溃 -->
+        <item name="alertDialogTheme">@style/Theme.LingXiTV.Dialog</item>
+    </style>
+
+    <style name="Theme.LingXiTV.Dialog" parent="Theme.AppCompat.Light.Dialog.Alert">
+        <item name="colorPrimary">@color/lingxi_green</item>
+        <item name="colorPrimaryDark">@color/lingxi_green_dark</item>
+        <item name="colorAccent">@color/lingxi_green_light</item>
     </style>
 
 </resources>

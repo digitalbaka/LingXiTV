@@ -9,8 +9,8 @@ android {
         applicationId "com.lingxi.tv"
         minSdk 23
         targetSdk 34
-        versionCode 2
-        versionName "1.1.0"
+        versionCode 3
+        versionName "1.2.0"
 
         // Leanback 需要
         vectorDrawables.useSupportLibrary = true
@@ -46,6 +46,14 @@ android {
     }
 }
 
+// 强制 okio 使用 2.10.0，避免传递依赖拉入 okio 3.x (需 Kotlin 1.9) 导致编译失败
+configurations.all {
+    resolutionStrategy {
+        force 'com.squareup.okio:okio:2.10.0'
+    }
+    exclude group: 'com.squareup.okio', module: 'okio-jvm'
+}
+
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation 'androidx.core:core-ktx:1.12.0'
@@ -69,6 +77,8 @@ dependencies {
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
+    // 强制 okio 2.10.0，避免 okio 3.x (Kotlin 1.9) 与构建环境 Kotlin 编译器不兼容
+    implementation 'com.squareup.okio:okio:2.10.0'
 
     // JSON 解析
     implementation 'com.google.code.gson:gson:2.10.1'

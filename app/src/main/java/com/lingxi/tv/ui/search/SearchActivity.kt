@@ -20,7 +20,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * 搜索 Activity - 使用 Leanback SearchFragment
+ * 搜索 Activity - 使用 Leanback SearchFragment，支持分页加载
  */
 class SearchActivity : FragmentActivity(), SearchSupportFragment.SearchResultProvider {
 
@@ -29,6 +29,13 @@ class SearchActivity : FragmentActivity(), SearchSupportFragment.SearchResultPro
     private val repository = LingXiApp.get().repository
 
     private var searchJob: Job? = null
+    private var loadMoreJob: Job? = null
+
+    // 当前搜索状态
+    private var currentQuery: String = ""
+    private var currentPage: Int = 1
+    private var hasMore: Boolean = true
+    private var loading: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +57,18 @@ class SearchActivity : FragmentActivity(), SearchSupportFragment.SearchResultPro
                 startActivity(intent)
             }
         }
+
+        // 选中接近末尾时加载下一页
+        searchFragment.setOnItemViewSelectedListener { _, item, row, _ ->
+            if (item is Video && row is ListRow) {
+                val adapter = row.adapter as? ArrayObjectAdapter ?: return@setOnItemViewSelectedListener
+                val position = adapter.indexOf(item)
+                val total = adapter.size()
+                if (total - position <= 5) {
+                    loadMoreResults()
+                }
+            }
+        }
     }
 
     override fun getResultsAdapter(): ObjectAdapter = rowsAdapter
@@ -62,6 +81,7 @@ class SearchActivity : FragmentActivity(), SearchSupportFragment.SearchResultPro
                 performSearch(newQuery)
             } else {
                 rowsAdapter.clear()
+                currentQuery = ""
             }
         }
         return true
@@ -76,19 +96,48 @@ class SearchActivity : FragmentActivity(), SearchSupportFragment.SearchResultPro
     }
 
     private fun performSearch(query: String) {
-        lifecycleScope.launch {
-            val result = repository.search(query, 1, 30)
+        currentQuery = query
+        currentPage = 1
+        hasMore = true
+        loading = false
+        rowsAdapter.clear()
+        loadSearchPage(query, 1)
+    }
+
+    private fun loadMoreResults() {
+        if (!hasMore || loading || currentQuery.isBlank()) return
+        loadSearchPage(currentQuery, currentPage)
+    }
+
+    private fun loadSearchPage(query: String, page: Int) {
+        if (loading) return
+        loading = true
+        loadMoreJob = lifecycleScope.launch {
+            val result = repository.search(query, page, PAGE_SIZE)
             result.onSuccess { searchResult ->
-                rowsAdapter.clear()
-                if (searchResult.items.isNotEmpty()) {
+                // 第一页时创建行，后续页追加到已有行
+                val listRowAdapter: ArrayObjectAdapter
+                if (page == 1) {
                     val header = HeaderItem(0L, "搜索结果")
-                    val listRowAdapter = ArrayObjectAdapter(VideoCardPresenter())
-                    searchResult.items.filter { it.isVideo }.forEach {
-                        listRowAdapter.add(it)
-                    }
+                    listRowAdapter = ArrayObjectAdapter(VideoCardPresenter())
                     rowsAdapter.add(ListRow(header, listRowAdapter))
+                } else {
+                    val firstRow = rowsAdapter.get(0) as? ListRow
+                    listRowAdapter = firstRow?.adapter as? ArrayObjectAdapter ?: return@onSuccess
                 }
+                searchResult.items.filter { it.isVideo }.forEach {
+                    listRowAdapter.add(it)
+                }
+                hasMore = searchResult.hasMore
+                currentPage = page + 1
+            }.onFailure {
+                hasMore = false
             }
+            loading = false
         }
+    }
+
+    companion object {
+        private const val PAGE_SIZE = 30
     }
 }
