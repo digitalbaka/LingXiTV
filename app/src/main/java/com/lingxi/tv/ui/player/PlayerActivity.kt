@@ -31,8 +31,9 @@ import kotlinx.coroutines.launch
  * 遥控器操作：
  *   左/右   快退/快进 10 秒
  *   OK      播放/暂停
- *   上       打开设置菜单（清晰度/画面比例/弹幕）
+ *   上       打开设置菜单（清晰度/画面比例/弹幕/循环）
  *   菜单键   打开设置菜单
+ *   下       呼出播放控制面板（暂停、进度条）
  */
 class PlayerActivity : AppCompatActivity() {
 
@@ -61,6 +62,7 @@ class PlayerActivity : AppCompatActivity() {
     private var currentResizeMode: Int = 0
     private var retryCount: Int = 0
     private var maxRetryCount: Int = 3
+    private var loopEnabled: Boolean = false
 
     private var progressUpdateJob: Job? = null
     private var optionsDialog: AlertDialog? = null
@@ -220,6 +222,15 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
+     * 切换单曲循环
+     */
+    private fun toggleLoop() {
+        loopEnabled = !loopEnabled
+        player?.repeatMode = if (loopEnabled) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        Toast.makeText(this, if (loopEnabled) "循环: 开" else "循环: 关", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
      * 显示设置菜单：清晰度、画面比例、弹幕开关
      */
     private fun showOptionsDialog() {
@@ -231,6 +242,7 @@ class PlayerActivity : AppCompatActivity() {
         options.add("清晰度: ${qualityList.getOrNull(currentQualityIndex)?.label ?: "默认"}")
         options.add("画面比例: ${RESIZE_MODE_LABELS[currentResizeMode]}")
         options.add("弹幕: ${if (danmakuView.isDanmakuEnabled()) "开" else "关"}")
+        options.add("循环: ${if (loopEnabled) "开" else "关"}")
 
         optionsDialog = AlertDialog.Builder(this)
             .setTitle("播放设置")
@@ -239,6 +251,7 @@ class PlayerActivity : AppCompatActivity() {
                     0 -> showQualityDialog()
                     1 -> cycleResizeMode()
                     2 -> toggleDanmaku()
+                    3 -> toggleLoop()
                 }
             }
             .setNegativeButton("关闭", null)
@@ -301,6 +314,10 @@ class PlayerActivity : AppCompatActivity() {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_DPAD_UP -> {
                     showOptionsDialog()
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    playerView.showController()
                     return true
                 }
             }
