@@ -99,11 +99,13 @@ class MainBrowseFragment : BrowseSupportFragment() {
 
         // 异步加载该行视频
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = repository.getVideos(page = 1, pageSize = 20, sort = sort, partition = partition)
+            val result = repository.getVideos(page = 1, pageSize = 30, sort = sort, partition = partition)
             result.onSuccess { pageData ->
                 pageData.items.filter { it.isVideo }.forEach { video ->
                     listRowAdapter.add(video)
                 }
+            }.onFailure {
+                // 静默失败，该行保持空
             }
         }
     }

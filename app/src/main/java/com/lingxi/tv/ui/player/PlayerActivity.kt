@@ -5,11 +5,13 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
@@ -24,12 +26,26 @@ import kotlinx.coroutines.launch
 
 /**
  * 视频播放页
- * 集成 ExoPlayer + 弹幕渲染
+ * 功能：ExoPlayer 播放 + 弹幕渲染 + 清晰度切换 + 画面比例 + 弹幕开关
+ *
+ * 遥控器操作：
+ *   左/右   快退/快进 10 秒
+ *   OK      播放/暂停
+ *   上       打开设置菜单（清晰度/画面比例/弹幕）
+ *   菜单键   打开设置菜单
  */
 class PlayerActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_VIDEO_ID = "extra_video_id"
+
+        // 画面比例模式
+        private val RESIZE_MODES = intArrayOf(
+            AspectRatioFrameLayout.RESIZE_MODE_FIT,
+            AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+            AspectRatioFrameLayout.RESIZE_MODE_STRETCH
+        )
+        private val RESIZE_MODE_LABELS = arrayOf("适应屏幕", "全屏裁剪", "拉伸全屏")
     }
 
     private lateinit var playerView: PlayerView
@@ -41,12 +57,13 @@ class PlayerActivity : AppCompatActivity() {
     private var video: Video? = null
     private var currentQualityIndex: Int = 0
     private var qualityList: List<VideoQuality> = emptyList()
+    private var currentResizeMode: Int = 0
 
     private var progressUpdateJob: Job? = null
+    private var optionsDialog: AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 全屏 + 保持屏幕常亮
         window.addFlags(
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
                 WindowManager.LayoutParams.FLAG_FULLSCREEN
@@ -82,21 +99,16 @@ class PlayerActivity : AppCompatActivity() {
     private fun setupPlayer(video: Video?) {
         if (video == null) return
 
-        // 选择画质：优先 720p，电视端平衡流畅与清晰度
         qualityList = video.qualityOptions
-        val preferredHeight = 720
-        currentQualityIndex = qualityList.indexOfFirst { it.height == preferredHeight }
-            .coerceAtLeast(0)
+        // 优先选择 720p
+        currentQualityIndex = qualityList.indexOfFirst { it.height == 720 }
         if (currentQualityIndex < 0) currentQualityIndex = 0
 
-        val quality = qualityList.getOrNull(currentQualityIndex)
-        val videoUrl = quality?.getFullUrl(ApiClient.BASE_URL)
-            ?: video.getFullSrcUrl(ApiClient.BASE_URL)
+        val videoUrl = getCurrentQualityUrl() ?: video.getFullSrcUrl(ApiClient.BASE_URL)
 
         player = ExoPlayer.Builder(this).build().also { exoPlayer ->
             playerView.player = exoPlayer
-            val mediaItem = MediaItem.fromUri(Uri.parse(videoUrl))
-            exoPlayer.setMediaItem(mediaItem)
+            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(videoUrl)))
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
 
@@ -119,6 +131,91 @@ class PlayerActivity : AppCompatActivity() {
                 }
             })
         }
+    }
+
+    private fun getCurrentQualityUrl(): String? {
+        return qualityList.getOrNull(currentQualityIndex)?.getFullUrl(ApiClient.BASE_URL)
+    }
+
+    /**
+     * 切换清晰度，保持当前播放进度
+     */
+    private fun switchQuality(index: Int) {
+        if (index == currentQualityIndex || index < 0 || index >= qualityList.size) return
+        val exoPlayer = player ?: return
+        val position = exoPlayer.currentPosition
+        currentQualityIndex = index
+
+        val url = getCurrentQualityUrl() ?: return
+        exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
+        exoPlayer.prepare()
+        exoPlayer.seekTo(position)
+        exoPlayer.playWhenReady = true
+
+        danmakuView.seekTo(position)
+        Toast.makeText(this, "已切换到 ${qualityList[index].label}", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * 切换画面比例
+     */
+    private fun cycleResizeMode() {
+        currentResizeMode = (currentResizeMode + 1) % RESIZE_MODES.size
+        playerView.resizeMode = RESIZE_MODES[currentResizeMode]
+        Toast.makeText(this, "画面比例: ${RESIZE_MODE_LABELS[currentResizeMode]}", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * 切换弹幕开关
+     */
+    private fun toggleDanmaku() {
+        val enabled = !danmakuView.isDanmakuEnabled()
+        danmakuView.setDanmakuEnabled(enabled)
+        Toast.makeText(this, if (enabled) "弹幕: 开" else "弹幕: 关", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * 显示设置菜单：清晰度、画面比例、弹幕开关
+     */
+    private fun showOptionsDialog() {
+        val options = mutableListOf<String>()
+        options.add("清晰度: ${qualityList.getOrNull(currentQualityIndex)?.label ?: "默认"}")
+        options.add("画面比例: ${RESIZE_MODE_LABELS[currentResizeMode]}")
+        options.add("弹幕: ${if (danmakuView.isDanmakuEnabled()) "开" else "关"}")
+
+        optionsDialog = AlertDialog.Builder(this)
+            .setTitle("播放设置")
+            .setItems(options.toTypedArray()) { _, which ->
+                when (which) {
+                    0 -> showQualityDialog()
+                    1 -> cycleResizeMode()
+                    2 -> toggleDanmaku()
+                }
+            }
+            .setNegativeButton("关闭", null)
+            .create()
+        optionsDialog?.show()
+    }
+
+    /**
+     * 显示清晰度选择对话框
+     */
+    private fun showQualityDialog() {
+        if (qualityList.isEmpty()) {
+            Toast.makeText(this, "暂无可用清晰度", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = qualityList.map { it.label }.toTypedArray()
+        val current = currentQualityIndex
+
+        AlertDialog.Builder(this)
+            .setTitle("选择清晰度")
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                switchQuality(which)
+                dialog.dismiss()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun loadDanmaku(videoId: Long) {
@@ -149,11 +246,19 @@ class PlayerActivity : AppCompatActivity() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
-                player?.let { it.seekTo((it.currentPosition - 10000).coerceAtLeast(0)) }
+                player?.let {
+                    val pos = (it.currentPosition - 10000).coerceAtLeast(0)
+                    it.seekTo(pos)
+                    danmakuView.seekTo(pos)
+                }
                 return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                player?.let { it.seekTo((it.currentPosition + 10000).coerceAtMost(it.duration)) }
+                player?.let {
+                    val pos = (it.currentPosition + 10000).coerceAtMost(it.duration)
+                    it.seekTo(pos)
+                    danmakuView.seekTo(pos)
+                }
                 return true
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
@@ -168,6 +273,11 @@ class PlayerActivity : AppCompatActivity() {
             }
             KeyEvent.KEYCODE_MEDIA_PAUSE -> {
                 player?.pause()
+                return true
+            }
+            // 菜单键 / 上键：打开播放设置菜单
+            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_DPAD_UP -> {
+                showOptionsDialog()
                 return true
             }
         }
@@ -192,6 +302,8 @@ class PlayerActivity : AppCompatActivity() {
         super.onDestroy()
         stopProgressUpdate()
         danmakuView.setPlaying(false)
+        optionsDialog?.dismiss()
+        optionsDialog = null
         player?.release()
         player = null
     }

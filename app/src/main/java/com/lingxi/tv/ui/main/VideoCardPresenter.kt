@@ -16,8 +16,8 @@ import com.lingxi.tv.util.FormatUtils
  */
 class VideoCardPresenter : Presenter() {
 
-    private val CARD_WIDTH = 320
-    private val CARD_HEIGHT = 180
+    private val CARD_WIDTH = 313
+    private val CARD_HEIGHT = 176
 
     override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
         val context = parent.context
@@ -26,7 +26,8 @@ class VideoCardPresenter : Presenter() {
             isFocusableInTouchMode = true
             setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
             setCardType(ImageCardView.CARD_TYPE_INFO_UNDER)
-            setInfoVisibility(ImageCardView.CARD_REGION_VISIBLE_ACTIVATED)
+            // 始终显示标题等信息，避免未选中卡片看起来"空白"
+            setInfoVisibility(ImageCardView.CARD_REGION_VISIBLE_ALWAYS)
         }
         return ViewHolder(cardView)
     }

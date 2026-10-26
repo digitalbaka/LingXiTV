@@ -12,7 +12,8 @@
         android:background="@android:color/black"
         app:use_controller="true"
         app:resize_mode="fit"
-        app:show_buffering="when_playing" />
+        app:show_buffering="when_playing"
+        app:surface_type="texture_view" />
 
     <com.lingxi.tv.player.DanmakuView
         android:id="@+id/danmaku_view"

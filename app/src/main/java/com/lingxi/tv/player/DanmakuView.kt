@@ -45,14 +45,15 @@ class DanmakuView @JvmOverloads constructor(
     private var lastDispatchIndex: Int = 0
     private var lastFrameTime: Long = 0
     private var isPlaying: Boolean = false
+    private var danmakuEnabled: Boolean = true
 
     // 配置
-    var maxScrollTracks: Int = 8
+    var maxScrollTracks: Int = 10
     var maxTopTracks: Int = 3
     var maxBottomTracks: Int = 3
-    var maxScreenCount: Int = 60
-    var scrollSpeedBase: Float = 180f // px/s
-    var textScale: Float = 1.0f
+    var maxScreenCount: Int = 80
+    var scrollSpeedBase: Float = 200f // px/s
+    var textScale: Float = 1.4f // 电视端放大弹幕字号
 
     private val density: Float = resources.displayMetrics.density
 
@@ -88,6 +89,8 @@ class DanmakuView @JvmOverloads constructor(
         currentPositionMs = positionMs
         if (isPlaying) {
             dispatchDanmaku()
+            // 派发弹幕后必须触发重绘，否则 onDraw 不会被调用
+            invalidate()
         }
     }
 
@@ -96,7 +99,19 @@ class DanmakuView @JvmOverloads constructor(
         lastFrameTime = if (playing) System.currentTimeMillis() else 0
     }
 
+    /** 开关弹幕，关闭时清空屏幕上的活跃弹幕 */
+    fun setDanmakuEnabled(enabled: Boolean) {
+        danmakuEnabled = enabled
+        if (!enabled) {
+            clearActive()
+        }
+        invalidate()
+    }
+
+    fun isDanmakuEnabled(): Boolean = danmakuEnabled
+
     private fun dispatchDanmaku() {
+        if (!danmakuEnabled) return
         val now = currentPositionMs
         while (lastDispatchIndex < allDanmaku.size &&
             allDanmaku[lastDispatchIndex].timeMs <= now
