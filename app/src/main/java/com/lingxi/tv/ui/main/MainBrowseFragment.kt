@@ -11,9 +11,7 @@ import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.ListRowPresenter
 import androidx.leanback.widget.OnItemViewClickedListener
 import androidx.leanback.widget.OnItemViewSelectedListener
-import androidx.leanback.widget.Presenter
 import androidx.leanback.widget.Row
-import androidx.leanback.widget.RowPresenter
 import androidx.lifecycle.lifecycleScope
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
@@ -30,7 +28,7 @@ class MainBrowseFragment : BrowseSupportFragment() {
     private lateinit var rowsAdapter: ArrayObjectAdapter
     private val repository = LingXiApp.get().repository
 
-    // 每行的分页状态：headerId -> (当前页码, 是否还有更多, 加载中标志)
+    // 每行的分页状态
     private data class PageState(
         var currentPage: Int = 1,
         var hasMore: Boolean = true,
@@ -42,7 +40,6 @@ class MainBrowseFragment : BrowseSupportFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
         setupUI()
         setupEventListeners()
         loadData()
@@ -64,36 +61,33 @@ class MainBrowseFragment : BrowseSupportFragment() {
 
     private fun setupEventListeners() {
         onItemViewClickedListener = OnItemViewClickedListener { _, item, _, _ ->
-            if (item is Video) {
-                val intent = Intent(requireContext(), PlayerActivity::class.java).apply {
-                    putExtra(PlayerActivity.EXTRA_VIDEO_ID, item.id)
-                }
-                startActivity(intent)
+            val video = item as? Video ?: return@OnItemViewClickedListener
+            val intent = Intent(requireContext(), PlayerActivity::class.java).apply {
+                putExtra(PlayerActivity.EXTRA_VIDEO_ID, video.id)
             }
+            startActivity(intent)
         }
 
         // 选中项接近行尾时自动加载下一页
         onItemViewSelectedListener = OnItemViewSelectedListener { _, item, row, _ ->
-            if (item is Video && row is ListRow) {
-                val headerId = row.headerItem.id
-                val adapter = row.adapter as? ArrayObjectAdapter ?: return@OnItemViewSelectedListener
-                val position = adapter.indexOf(item)
-                val total = adapter.size()
-                // 当选中倒数第 5 个以内时，触发加载下一页
-                if (total - position <= 5) {
-                    loadMore(row, headerId)
-                }
+            val video = item as? Video ?: return@OnItemViewSelectedListener
+            val listRow = row as? ListRow ?: return@OnItemViewSelectedListener
+            val headerId = listRow.headerItem.id
+            val innerAdapter = listRow.adapter as? ArrayObjectAdapter ?: return@OnItemViewSelectedListener
+            val position = innerAdapter.indexOf(video)
+            val total = innerAdapter.size()
+            // 当选中倒数第 3 个以内时，触发加载下一页
+            if (total > 0 && position >= total - 3) {
+                loadPage(listRow, headerId)
             }
         }
     }
 
     private fun loadData() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            // 先加载推荐和最新
+        lifecycleScope.launch {
             addRow(HEADER_RECOMMEND, "推荐", sort = "hot")
             addRow(HEADER_NEWEST, "最新", sort = "new")
 
-            // 加载分区
             val result = repository.getPartitions()
             result.onSuccess { pageData ->
                 pageData.items.forEachIndexed { index, partition ->
@@ -107,9 +101,6 @@ class MainBrowseFragment : BrowseSupportFragment() {
         }
     }
 
-    /**
-     * 添加一个视频行并加载第一页
-     */
     private fun addRow(headerId: Long, name: String, sort: String? = null, partition: String? = null) {
         val headerItem = HeaderItem(headerId, name)
         val listRowAdapter = ArrayObjectAdapter(VideoCardPresenter())
@@ -117,15 +108,7 @@ class MainBrowseFragment : BrowseSupportFragment() {
         rowsAdapter.add(listRow)
 
         pageStates[headerId] = PageState(sort = sort, partition = partition)
-
         loadPage(listRow, headerId)
-    }
-
-    /**
-     * 加载指定行的下一页
-     */
-    private fun loadMore(row: ListRow, headerId: Long) {
-        loadPage(row, headerId)
     }
 
     /**
@@ -136,25 +119,38 @@ class MainBrowseFragment : BrowseSupportFragment() {
         if (!state.hasMore || state.loading) return
         state.loading = true
 
-        val listRowAdapter = row.adapter as? ArrayObjectAdapter ?: return
+        val innerAdapter = row.adapter as? ArrayObjectAdapter ?: return
 
-        viewLifecycleOwner.lifecycleScope.launch {
-            val result = repository.getVideos(
-                page = state.currentPage,
-                pageSize = PAGE_SIZE,
-                sort = state.sort,
-                partition = state.partition
-            )
-            result.onSuccess { pageData ->
-                pageData.items.filter { it.isVideo }.forEach { video ->
-                    listRowAdapter.add(video)
+        lifecycleScope.launch {
+            try {
+                val result = repository.getVideos(
+                    page = state.currentPage,
+                    pageSize = PAGE_SIZE,
+                    sort = state.sort,
+                    partition = state.partition
+                )
+                result.onSuccess { pageData ->
+                    val beforeSize = innerAdapter.size()
+                    pageData.items.filter { it.isVideo }.forEach { video ->
+                        innerAdapter.add(video)
+                    }
+                    val addedCount = innerAdapter.size() - beforeSize
+                    // 双重判断 hasMore：API 字段 + 已加载数量 vs 总数
+                    state.hasMore = pageData.hasMore && innerAdapter.size() < pageData.total
+                    state.currentPage++
+                    // 强制刷新行视图，确保 Leanback HorizontalGridView 显示新增项
+                    if (addedCount > 0) {
+                        val rowIndex = rowsAdapter.indexOf(row)
+                        if (rowIndex >= 0) {
+                            rowsAdapter.notifyItemRangeChanged(rowIndex, 1)
+                        }
+                    }
+                }.onFailure {
+                    // 单次失败不终止分页，仅重置 loading 允许下次重试
                 }
-                state.hasMore = pageData.hasMore
-                state.currentPage++
-            }.onFailure {
-                state.hasMore = false
+            } finally {
+                state.loading = false
             }
-            state.loading = false
         }
     }
 

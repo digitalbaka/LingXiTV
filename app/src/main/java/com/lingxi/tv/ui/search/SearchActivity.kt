@@ -50,23 +50,22 @@ class SearchActivity : FragmentActivity(), SearchSupportFragment.SearchResultPro
 
         searchFragment.setSearchResultProvider(this)
         searchFragment.setOnItemViewClickedListener { _, item, _, _ ->
-            if (item is Video) {
-                val intent = Intent(this, PlayerActivity::class.java).apply {
-                    putExtra(PlayerActivity.EXTRA_VIDEO_ID, item.id)
-                }
-                startActivity(intent)
+            val video = item as? Video ?: return@setOnItemViewClickedListener
+            val intent = Intent(this, PlayerActivity::class.java).apply {
+                putExtra(PlayerActivity.EXTRA_VIDEO_ID, video.id)
             }
+            startActivity(intent)
         }
 
         // 选中接近末尾时加载下一页
         searchFragment.setOnItemViewSelectedListener { _, item, row, _ ->
-            if (item is Video && row is ListRow) {
-                val adapter = row.adapter as? ArrayObjectAdapter ?: return@setOnItemViewSelectedListener
-                val position = adapter.indexOf(item)
-                val total = adapter.size()
-                if (total - position <= 5) {
-                    loadMoreResults()
-                }
+            val video = item as? Video ?: return@setOnItemViewSelectedListener
+            val listRow = row as? ListRow ?: return@setOnItemViewSelectedListener
+            val adapter = listRow.adapter as? ArrayObjectAdapter ?: return@setOnItemViewSelectedListener
+            val position = adapter.indexOf(video)
+            val total = adapter.size()
+            if (total > 0 && position >= total - 3) {
+                loadMoreResults()
             }
         }
     }
@@ -113,27 +112,33 @@ class SearchActivity : FragmentActivity(), SearchSupportFragment.SearchResultPro
         if (loading) return
         loading = true
         loadMoreJob = lifecycleScope.launch {
-            val result = repository.search(query, page, PAGE_SIZE)
-            result.onSuccess { searchResult ->
-                // 第一页时创建行，后续页追加到已有行
-                val listRowAdapter: ArrayObjectAdapter
-                if (page == 1) {
-                    val header = HeaderItem(0L, "搜索结果")
-                    listRowAdapter = ArrayObjectAdapter(VideoCardPresenter())
-                    rowsAdapter.add(ListRow(header, listRowAdapter))
-                } else {
-                    val firstRow = rowsAdapter.get(0) as? ListRow
-                    listRowAdapter = firstRow?.adapter as? ArrayObjectAdapter ?: return@onSuccess
+            try {
+                val result = repository.search(query, page, PAGE_SIZE)
+                result.onSuccess { searchResult ->
+                    val listRowAdapter: ArrayObjectAdapter
+                    if (page == 1) {
+                        val header = HeaderItem(0L, "搜索结果")
+                        listRowAdapter = ArrayObjectAdapter(VideoCardPresenter())
+                        rowsAdapter.add(ListRow(header, listRowAdapter))
+                    } else {
+                        val firstRow = rowsAdapter.get(0) as? ListRow
+                        listRowAdapter = firstRow?.adapter as? ArrayObjectAdapter ?: return@onSuccess
+                    }
+                    val beforeSize = listRowAdapter.size()
+                    searchResult.items.filter { it.isVideo }.forEach {
+                        listRowAdapter.add(it)
+                    }
+                    hasMore = searchResult.hasMore && listRowAdapter.size() < searchResult.total
+                    currentPage = page + 1
+                    // 强制刷新行视图
+                    if (listRowAdapter.size() > beforeSize && rowsAdapter.size() > 0) {
+                        rowsAdapter.notifyItemRangeChanged(0, 1)
+                    }
                 }
-                searchResult.items.filter { it.isVideo }.forEach {
-                    listRowAdapter.add(it)
-                }
-                hasMore = searchResult.hasMore
-                currentPage = page + 1
-            }.onFailure {
-                hasMore = false
+                // 失败不终止，允许重试
+            } finally {
+                loading = false
             }
-            loading = false
         }
     }
 

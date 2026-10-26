@@ -1,5 +1,21 @@
 # 更新日志
 
+## v1.3.0 (2026-10-27)
+
+分页加载修复与构建兼容性版本。
+
+### 修复
+
+- 🐛 **分页加载不生效**：改用 `lifecycleScope` 替代 `viewLifecycleOwner.lifecycleScope`，避免 View 销毁时协程被取消导致 `loading` 状态卡死；加载完成后调用 `notifyItemRangeChanged` 强制刷新 Leanback 行视图
+- 🐛 **`is` 类型检查编译错误**：Leanback 接口平台类型推断导致 `item is Video` 报 "instance is always false"，改用 `as?` 安全转换
+- 🐛 **单次网络失败终止分页**：失败不再将 `hasMore` 设为 `false`，允许下次重试；`try/finally` 确保 `loading` 状态正确重置
+- 🐛 **构建依赖冲突**：强制 okio 2.10.0 并排除 okio-jvm，解决 Kotlin 元数据版本不匹配
+
+### 改进
+
+- 📄 分页触发阈值优化为倒数第 3 个，更灵敏
+- 📄 hasMore 双重判断：API 字段 + 已加载数量 vs 总数
+
 ## v1.2.0 (2026-10-27)
 
 Bug 修复与功能完善版本。
