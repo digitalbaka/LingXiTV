@@ -9,8 +9,8 @@ android {
         applicationId "com.lingxi.tv"
         minSdk 23
         targetSdk 34
-        versionCode 8
-        versionName "1.8.0"
+        versionCode 9
+        versionName "1.8.1"
 
         // Leanback 需要
         vectorDrawables.useSupportLibrary = true

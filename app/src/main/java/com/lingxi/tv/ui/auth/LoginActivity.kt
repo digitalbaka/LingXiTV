@@ -159,12 +159,26 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun renderCaptcha(svg: String) {
+    private fun renderCaptcha(raw: String) {
+        // 服务端 SVG 根标签自带 width/height 属性，若直接追加同名属性会被 WebView
+        // 严格 XML 解析判为 "Attribute width redefined" 导致整页报错。先清洗再注入。
+        var svg = raw.trim()
+            .replace(Regex("^<\\?xml[^>]*\\?>\\s*"), "")
+            .replace(Regex("<!DOCTYPE[^>]*>\\s*", RegexOption.IGNORE_CASE), "")
+        val rootTagRegex = Regex("<svg\\b[^>]*>", RegexOption.IGNORE_CASE)
+        val attrRegex = Regex("\\s(width|height|preserveAspectRatio)\\s*=\\s*(\"[^\"]*\"|'[^']*')")
+        val root = rootTagRegex.find(svg)
+        if (root != null) {
+            val cleaned = attrRegex.replace(root.value, "")
+                .replaceFirst("<svg", "<svg width=\"100%\" height=\"100%\" preserveAspectRatio=\"xMidYMid meet\"")
+            svg = svg.replaceRange(root.range, cleaned)
+        }
+
         val html = """<html><head><meta name="viewport" content="width=150,initial-scale=1"/></head>
-            <body style="margin:0;padding:0;background:#2A2A2A;display:flex;align-items:center;justify-content:center;">
-            <div style="width:100%;max-width:150px;">${svg.replace("<svg", "<svg width=\"100%\" height=\"100%\" preserveAspectRatio=\"xMidYMid meet\"")}</div>
-            </body></html>"""
-        wvCaptcha.loadData(html, "image/svg+xml", "UTF-8")
+            <body style="margin:0;padding:0;background:#2A2A2A;display:flex;align-items:center;justify-content:center;height:100%;">$svg</body></html>"""
+        // 必须用 text/html + loadDataWithBaseURL：
+        // image/svg+xml 会触发严格 XML 解析；loadData 会把 % 当 URL 编码导致 100% 尺寸失效
+        wvCaptcha.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
     }
 
     // ==================== 第二步：发送邮箱验证码（60 秒冷却） ====================

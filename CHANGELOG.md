@@ -1,5 +1,13 @@
 # 更新日志
 
+## v1.8.1 (2026-10-27)
+
+两步验证图形验证码渲染紧急修复。
+
+### 修复
+
+- 🖼️ **两步验证图形验证码显示为 XML 报错**：服务端 SVG 根标签自带 `width="132" height="44"` 属性，客户端直接追加同名属性被 WebView 严格 XML 解析判为 `Attribute width redefined`，整页变成报错文本。改为：先清洗根标签已有的 width/height/preserveAspectRatio，再注入自适应尺寸；同时 MIME 从 `image/svg+xml`（严格 XML 模式）改 `text/html`，并用 `loadDataWithBaseURL` 避免 `loadData` 把 `%` 当 URL 编码符导致 `100%` 尺寸失效。
+
 ## v1.8.0 (2026-10-27)
 
 登录系统重构与稳定性修复版本。
