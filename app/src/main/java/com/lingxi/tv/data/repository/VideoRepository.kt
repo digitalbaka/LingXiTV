@@ -1,7 +1,9 @@
 package com.lingxi.tv.data.repository
 
+import com.google.gson.reflect.TypeToken
 import com.lingxi.tv.data.api.ApiClient
 import com.lingxi.tv.data.model.ActionResult
+import com.lingxi.tv.data.model.ApiResponse
 import com.lingxi.tv.data.model.AdminComment
 import com.lingxi.tv.data.model.AdminOverview
 import com.lingxi.tv.data.model.AdminReport
@@ -10,7 +12,10 @@ import com.lingxi.tv.data.model.AdminVideo
 import com.lingxi.tv.data.model.Captcha
 import com.lingxi.tv.data.model.CheckinResult
 import com.lingxi.tv.data.model.Conversation
+import com.lingxi.tv.data.model.LoginRequest
+import com.lingxi.tv.data.model.SendCodeRequest
 import com.lingxi.tv.data.model.UserProfile
+import com.lingxi.tv.data.model.Verify2faRequest
 import com.lingxi.tv.data.model.DanmakuList
 import com.lingxi.tv.data.model.GatewayInfo
 import com.lingxi.tv.data.model.LoginResult
@@ -19,6 +24,7 @@ import com.lingxi.tv.data.model.Partition
 import com.lingxi.tv.data.model.SearchResult
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoDetail
+import retrofit2.HttpException
 
 /**
  * 视频数据仓库
@@ -136,28 +142,64 @@ class VideoRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
+    /**
+     * 账号密码登录。
+     * 站点强制两步验证：正确的账号密码会返回 HTTP 400，错误体 data 中携带
+     * mfaRequired=true / mfaTicket / emailMasked —— 此时作为成功结果返回，
+     * 由界面跳转两步验证流程。
+     */
     suspend fun login(username: String, password: String): Result<LoginResult> {
         return try {
-            val resp = api.login(username, password)
-            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            val resp = api.login(LoginRequest(username, password))
+            if (resp.data != null) Result.success(resp.data)
             else Result.failure(Exception(resp.message.ifEmpty { "登录失败" }))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: HttpException) {
+            // HTTP 400 等错误：解析错误体，检测两步验证要求
+            val errorResp = parseErrorBody<LoginResult>(e)
+            if (errorResp?.data?.mfaRequired == true) {
+                Result.success(errorResp.data!!)
+            } else {
+                Result.failure(Exception(errorResp?.message?.ifEmpty { null } ?: "登录失败（HTTP ${e.code()}）"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
-    suspend fun sendEmailCode(email: String?, captchaId: String, captchaCode: String): Result<ActionResult> {
+    /** 发送邮箱验证码到绑定邮箱 */
+    suspend fun sendEmailCode(mfaTicket: String?, captchaId: String, captchaCode: String): Result<ActionResult> {
         return try {
-            val resp = api.sendEmailCode(email, captchaId, captchaCode)
-            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true, "已发送"))
-            else Result.failure(Exception(resp.message.ifEmpty { "发送失败" }))
-        } catch (e: Exception) { Result.failure(e) }
+            val resp = api.sendEmailCode(SendCodeRequest(mfaTicket, captchaId, captchaCode))
+            Result.success(resp.data ?: ActionResult(true, resp.message.ifEmpty { "已发送" }))
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseErrorBody<ActionResult>(e)?.message ?: "发送失败（HTTP ${e.code()}）"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
-    suspend fun verify2fa(code: String, remember: Boolean = true): Result<LoginResult> {
+    /** 验证邮箱验证码完成两步验证，返回 token */
+    suspend fun verify2fa(mfaTicket: String, code: String, rememberDevice: Boolean): Result<LoginResult> {
         return try {
-            val resp = api.verify2fa(code, remember)
-            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            val resp = api.verify2fa(Verify2faRequest(mfaTicket, code, rememberDevice))
+            if (resp.data != null) Result.success(resp.data)
             else Result.failure(Exception(resp.message.ifEmpty { "验证失败" }))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseErrorBody<LoginResult>(e)?.message ?: "验证失败（HTTP ${e.code()}）"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** 解析 HTTP 错误响应体为 ApiResponse 结构，提取服务器给出的 message/data */
+    private inline fun <reified T> parseErrorBody(e: HttpException): ApiResponse<T>? {
+        return try {
+            val body = e.response()?.errorBody()?.string() ?: return null
+            val type = object : TypeToken<ApiResponse<T>>() {}.type
+            ApiClient.gson.fromJson<ApiResponse<T>>(body, type)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     suspend fun logout(): Result<ActionResult> {

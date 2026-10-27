@@ -8,6 +8,7 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -16,49 +17,67 @@ import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
 import com.lingxi.tv.data.auth.AuthManager
 import com.lingxi.tv.data.model.Captcha
+import com.lingxi.tv.data.model.LoginResult
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * 登录界面
- * 流程：账号密码登录 → 若需二次验证则显示图形验证码+邮箱验证码 → 验证成功保存 Token
+ * 登录页（电视遥控器友好）
+ *
+ * 站点强制两步验证：
+ * 1. 账号密码登录 → 服务器返回 400 + mfaTicket（Repository 已解析为成功结果）
+ * 2. 切换到两步验证卡：图形验证码（SVG WebView 渲染）+ 邮箱验证码
+ * 3. 发送验证码 → 发送到绑定邮箱，60 秒冷却后才能重发
+ * 4. 验证并登录 → 获取 token 持久化，下次免登录
+ * 「记住这台设备 30 天」勾选后，30 天内本设备登录不再需要邮箱验证码
  */
 class LoginActivity : AppCompatActivity() {
 
     private val repository = LingXiApp.get().repository
 
-    private lateinit var loginForm: View
-    private lateinit var twoFactorForm: View
+    private lateinit var layoutLogin: LinearLayout
+    private lateinit var layout2fa: LinearLayout
     private lateinit var etUsername: EditText
     private lateinit var etPassword: EditText
-    private lateinit var etCaptcha: EditText
-    private lateinit var etEmailCode: EditText
+    private lateinit var btnLogin: Button
+    private lateinit var tv2faNotice: TextView
     private lateinit var wvCaptcha: WebView
+    private lateinit var etCaptchaCode: EditText
+    private lateinit var btnRefreshCaptcha: Button
+    private lateinit var etEmailCode: EditText
+    private lateinit var btnSendCode: Button
+    private lateinit var cbRememberDevice: CheckBox
+    private lateinit var btnVerify: Button
+    private lateinit var tvBackLogin: TextView
     private lateinit var tvStatus: TextView
-    private lateinit var tvTwoFactorHint: TextView
-    private lateinit var cbRemember: CheckBox
 
+    private var mfaTicket: String? = null
     private var captcha: Captcha? = null
-    private var maskedEmail: String? = null
+    private var countdownJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
 
-        loginForm = findViewById(R.id.loginForm)
-        twoFactorForm = findViewById(R.id.twoFactorForm)
+        layoutLogin = findViewById(R.id.layoutLogin)
+        layout2fa = findViewById(R.id.layout2fa)
         etUsername = findViewById(R.id.etUsername)
         etPassword = findViewById(R.id.etPassword)
-        etCaptcha = findViewById(R.id.etCaptcha)
-        etEmailCode = findViewById(R.id.etEmailCode)
+        btnLogin = findViewById(R.id.btnLogin)
+        tv2faNotice = findViewById(R.id.tv2faNotice)
         wvCaptcha = findViewById(R.id.wvCaptcha)
+        etCaptchaCode = findViewById(R.id.etCaptchaCode)
+        btnRefreshCaptcha = findViewById(R.id.btnRefreshCaptcha)
+        etEmailCode = findViewById(R.id.etEmailCode)
+        btnSendCode = findViewById(R.id.btnSendCode)
+        cbRememberDevice = findViewById(R.id.cbRememberDevice)
+        btnVerify = findViewById(R.id.btnVerify)
+        tvBackLogin = findViewById(R.id.tvBackLogin)
         tvStatus = findViewById(R.id.tvStatus)
-        tvTwoFactorHint = findViewById(R.id.tvTwoFactorHint)
-        cbRemember = findViewById(R.id.cbRemember)
 
+        // WebView 只渲染静态 SVG，禁用一切多余能力省内存
         wvCaptcha.settings.javaScriptEnabled = false
-        wvCaptcha.settings.loadWithOverviewMode = true
-        wvCaptcha.settings.useWideViewPort = true
-        // 内存优化：禁用缓存、DOM 存储、数据库，验证码不需要持久化
         wvCaptcha.settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
         wvCaptcha.settings.domStorageEnabled = false
         wvCaptcha.settings.databaseEnabled = false
@@ -66,125 +85,194 @@ class LoginActivity : AppCompatActivity() {
         wvCaptcha.isVerticalScrollBarEnabled = false
         wvCaptcha.isHorizontalScrollBarEnabled = false
 
-        findViewById<Button>(R.id.btnLogin).setOnClickListener { doLogin() }
-        findViewById<Button>(R.id.btnRefreshCaptcha).setOnClickListener { loadCaptcha() }
-        findViewById<Button>(R.id.btnSendCode).setOnClickListener { sendCode() }
-        findViewById<Button>(R.id.btnVerify).setOnClickListener { verify() }
+        btnLogin.setOnClickListener { doLogin() }
+        btnRefreshCaptcha.setOnClickListener { loadCaptcha() }
+        btnSendCode.setOnClickListener { sendCode() }
+        btnVerify.setOnClickListener { verifyAndLogin() }
+        tvBackLogin.setOnClickListener { backToLogin() }
+
+        etUsername.requestFocus()
+    }
+
+    private fun showStatus(msg: String?) {
+        if (msg.isNullOrEmpty()) {
+            tvStatus.visibility = View.GONE
+        } else {
+            tvStatus.text = msg
+            tvStatus.visibility = View.VISIBLE
+        }
+    }
+
+    // ==================== 第一步：账号密码登录 ====================
+
+    private fun doLogin() {
+        val username = etUsername.text.toString().trim()
+        val password = etPassword.text.toString()
+        if (username.isEmpty() || password.isEmpty()) {
+            showStatus("请输入账号和密码")
+            return
+        }
+        btnLogin.isEnabled = false
+        showStatus("登录中…")
+        lifecycleScope.launch {
+            repository.login(username, password).onSuccess { result ->
+                if (result.mfaRequired) {
+                    // 站点强制两步验证：进入验证流程
+                    mfaTicket = result.mfaTicket
+                    enter2fa(result.emailMasked)
+                } else {
+                    finishLogin(result)
+                }
+            }.onFailure {
+                btnLogin.isEnabled = true
+                showStatus("登录失败：${it.message}")
+            }
+        }
+    }
+
+    /** 切换到两步验证卡片 */
+    private fun enter2fa(emailMasked: String?) {
+        btnLogin.isEnabled = true
+        showStatus(null)
+        layoutLogin.visibility = View.GONE
+        layout2fa.visibility = View.VISIBLE
+        tv2faNotice.text = "检测到这台设备尚未通过验证，为保护账号安全，请输入发送到 ${emailMasked ?: "绑定邮箱"} 的验证码完成登录。"
+        etCaptchaCode.setText("")
+        etEmailCode.setText("")
+        loadCaptcha()
+        etCaptchaCode.requestFocus()
+    }
+
+    // ==================== 图形验证码 ====================
+
+    private fun loadCaptcha() {
+        btnRefreshCaptcha.isEnabled = false
+        lifecycleScope.launch {
+            repository.getCaptcha().onSuccess { c ->
+                captcha = c
+                btnRefreshCaptcha.isEnabled = true
+                renderCaptcha(c.svg)
+            }.onFailure {
+                btnRefreshCaptcha.isEnabled = true
+                Toast.makeText(this@LoginActivity, "验证码加载失败：${it.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun renderCaptcha(svg: String) {
+        val html = """<html><head><meta name="viewport" content="width=150,initial-scale=1"/></head>
+            <body style="margin:0;padding:0;background:#2A2A2A;display:flex;align-items:center;justify-content:center;">
+            <div style="width:100%;max-width:150px;">${svg.replace("<svg", "<svg width=\"100%\" height=\"100%\" preserveAspectRatio=\"xMidYMid meet\"")}</div>
+            </body></html>"""
+        wvCaptcha.loadData(html, "image/svg+xml", "UTF-8")
+    }
+
+    // ==================== 第二步：发送邮箱验证码（60 秒冷却） ====================
+
+    private fun sendCode() {
+        val ticket = mfaTicket
+        val captchaCode = etCaptchaCode.text.toString().trim()
+        if (ticket.isNullOrEmpty()) {
+            showStatus("登录会话已失效，请返回重新登录")
+            return
+        }
+        if (captchaCode.isEmpty()) {
+            showStatus("请先输入图形验证码")
+            return
+        }
+        btnSendCode.isEnabled = false
+        showStatus("验证码发送中…")
+        lifecycleScope.launch {
+            repository.sendEmailCode(ticket, captcha?.id ?: "", captchaCode)
+                .onSuccess {
+                    showStatus("验证码已发送到绑定邮箱，请查收")
+                    startCountdown()
+                }
+                .onFailure {
+                    btnSendCode.isEnabled = true
+                    showStatus("发送失败：${it.message}")
+                    // 图形验证码可能已被消耗，刷新
+                    loadCaptcha()
+                }
+        }
+    }
+
+    /** 发送冷却 60 秒倒计时 */
+    private fun startCountdown() {
+        countdownJob?.cancel()
+        countdownJob = lifecycleScope.launch {
+            for (sec in 60 downTo 1) {
+                btnSendCode.text = "${sec}s 后重发"
+                delay(1000)
+            }
+            btnSendCode.text = "发送验证码"
+            btnSendCode.isEnabled = true
+        }
+    }
+
+    // ==================== 第三步：验证并登录 ====================
+
+    private fun verifyAndLogin() {
+        val ticket = mfaTicket
+        val code = etEmailCode.text.toString().trim()
+        if (ticket.isNullOrEmpty()) {
+            showStatus("登录会话已失效，请返回重新登录")
+            return
+        }
+        if (code.length != 6) {
+            showStatus("请输入 6 位邮箱验证码")
+            return
+        }
+        btnVerify.isEnabled = false
+        showStatus("验证中…")
+        lifecycleScope.launch {
+            repository.verify2fa(ticket, code, cbRememberDevice.isChecked)
+                .onSuccess { result ->
+                    finishLogin(result)
+                }
+                .onFailure {
+                    btnVerify.isEnabled = true
+                    showStatus("验证失败：${it.message}")
+                }
+        }
+    }
+
+    /** 保存登录状态（持久化 token，下次免登录）并进入主界面 */
+    private fun finishLogin(result: LoginResult) {
+        val token = result.token
+        val user = result.user
+        if (token.isNullOrEmpty() || user == null) {
+            showStatus("登录响应异常，请重试")
+            btnVerify.isEnabled = true
+            return
+        }
+        AuthManager.saveLogin(token, user)
+        Toast.makeText(this, "登录成功，欢迎 ${user.nickname.ifEmpty { user.username }}", Toast.LENGTH_SHORT).show()
+        setResult(RESULT_OK)
+        finish()
+    }
+
+    private fun backToLogin() {
+        countdownJob?.cancel()
+        btnSendCode.isEnabled = true
+        btnSendCode.text = "发送验证码"
+        layout2fa.visibility = View.GONE
+        layoutLogin.visibility = View.VISIBLE
+        mfaTicket = null
+        showStatus(null)
+        etPassword.setText("")
+        etPassword.requestFocus()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        // 内存优化：WebView 必须显式销毁，否则泄露大量内存
+        countdownJob?.cancel()
+        // WebView 显式销毁，避免内存泄露
         wvCaptcha.stopLoading()
         wvCaptcha.loadUrl("about:blank")
         wvCaptcha.clearHistory()
         (wvCaptcha.parent as? ViewGroup)?.removeView(wvCaptcha)
         wvCaptcha.destroy()
         captcha = null
-    }
-
-    private fun setStatus(msg: String) {
-        tvStatus.text = msg
-    }
-
-    private fun doLogin() {
-        val username = etUsername.text.toString().trim()
-        val password = etPassword.text.toString().trim()
-        if (username.isEmpty() || password.isEmpty()) {
-            Toast.makeText(this, "请输入账号和密码", Toast.LENGTH_SHORT).show()
-            return
-        }
-        setStatus("登录中...")
-        lifecycleScope.launch {
-            val result = repository.login(username, password)
-            result.onSuccess { loginResult ->
-                if (loginResult.need2fa) {
-                    // 需要二次验证
-                    maskedEmail = loginResult.maskedEmail
-                    tvTwoFactorHint.text = "检测到这台设备尚未通过验证，请输入发送到${loginResult.maskedEmail ?: "邮箱"}的验证码完成登录。"
-                    loginForm.visibility = View.GONE
-                    twoFactorForm.visibility = View.VISIBLE
-                    loadCaptcha()
-                    setStatus("")
-                } else if (!loginResult.token.isNullOrEmpty()) {
-                    // 直接登录成功
-                    saveLogin(loginResult.token, loginResult.user)
-                } else {
-                    setStatus("登录失败：未知响应")
-                }
-            }.onFailure {
-                setStatus("登录失败：${it.message}")
-            }
-        }
-    }
-
-    private fun loadCaptcha() {
-        lifecycleScope.launch {
-            val result = repository.getCaptcha()
-            result.onSuccess { cap ->
-                captcha = cap
-                // SVG 直接加载到 WebView
-                val html = "<html><body style='margin:0;padding:0;'>${cap.svg}</body></html>"
-                wvCaptcha.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
-            }.onFailure {
-                setStatus("验证码加载失败：${it.message}")
-            }
-        }
-    }
-
-    private fun sendCode() {
-        val cap = captcha
-        val captchaCode = etCaptcha.text.toString().trim()
-        if (cap == null) {
-            Toast.makeText(this, "请先加载图形验证码", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (captchaCode.isEmpty()) {
-            Toast.makeText(this, "请输入图形验证码", Toast.LENGTH_SHORT).show()
-            return
-        }
-        setStatus("发送中...")
-        lifecycleScope.launch {
-            val result = repository.sendEmailCode(null, cap.id, captchaCode)
-            result.onSuccess {
-                setStatus("验证码已发送，请查收邮箱")
-                // 发送成功后刷新图形验证码
-                loadCaptcha()
-                etCaptcha.text.clear()
-            }.onFailure {
-                setStatus("发送失败：${it.message}")
-                loadCaptcha()
-                etCaptcha.text.clear()
-            }
-        }
-    }
-
-    private fun verify() {
-        val code = etEmailCode.text.toString().trim()
-        if (code.length < 4) {
-            Toast.makeText(this, "请输入邮箱验证码", Toast.LENGTH_SHORT).show()
-            return
-        }
-        setStatus("验证中...")
-        lifecycleScope.launch {
-            val result = repository.verify2fa(code, cbRemember.isChecked)
-            result.onSuccess { loginResult ->
-                if (!loginResult.token.isNullOrEmpty()) {
-                    saveLogin(loginResult.token, loginResult.user)
-                } else {
-                    setStatus("验证失败：未返回 Token")
-                }
-            }.onFailure {
-                setStatus("验证失败：${it.message}")
-            }
-        }
-    }
-
-    private fun saveLogin(token: String, user: com.lingxi.tv.data.model.User?) {
-        AuthManager.token = token
-        AuthManager.user = user
-        Toast.makeText(this, "登录成功", Toast.LENGTH_SHORT).show()
-        setResult(RESULT_OK)
-        finish()
     }
 }

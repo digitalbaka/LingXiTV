@@ -9,16 +9,42 @@ data class Captcha(
 )
 
 /**
+ * 登录请求体
+ */
+data class LoginRequest(
+    val username: String,
+    val password: String
+)
+
+/**
  * 登录响应
- * 直接登录成功：token + user 非空，need2fa=false
- * 需要二次验证：need2fa=true，返回 maskedEmail 和临时 ticket
+ * 直接登录成功：token + user
+ * 站点强制两步验证：HTTP 400，data 中返回 mfaRequired=true、mfaTicket、emailMasked
  */
 data class LoginResult(
     val token: String? = null,
     val user: User? = null,
-    val need2fa: Boolean = false,
-    val maskedEmail: String? = null,
-    val ticket: String? = null
+    val mfaRequired: Boolean = false,
+    val mfaTicket: String? = null,
+    val emailMasked: String? = null
+)
+
+/**
+ * 发送邮箱验证码请求体（发送到账号绑定邮箱）
+ */
+data class SendCodeRequest(
+    val mfaTicket: String? = null,
+    val captchaId: String,
+    val captchaCode: String
+)
+
+/**
+ * 两步验证请求体
+ */
+data class Verify2faRequest(
+    val mfaTicket: String,
+    val code: String,
+    val rememberDevice: Boolean
 )
 
 /**

@@ -3,218 +3,264 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_dark"
-    android:fillViewport="true">
+    android:fillViewport="true"
+    android:focusable="true"
+    android:focusableInTouchMode="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="48dp"
-        android:gravity="center_horizontal">
+        android:gravity="center_horizontal"
+        android:padding="48dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:text="凌汐弹幕网"
             android:textColor="@color/lingxi_green_light"
             android:textSize="32sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="8dp" />
+            android:textStyle="bold" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
             android:text="电视版登录"
             android:textColor="@color/text_secondary"
-            android:textSize="16sp"
-            android:layout_marginBottom="32dp" />
+            android:textSize="16sp" />
 
-        <!-- 账号密码登录区 -->
+        <!-- 登录卡片 -->
         <LinearLayout
-            android:id="@+id/loginForm"
-            android:layout_width="match_parent"
+            android:id="@+id/layoutLogin"
+            android:layout_width="640dp"
             android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:background="@color/card_bg"
             android:orientation="vertical"
-            android:maxWidth="480dp">
+            android:padding="40dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="账号"
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp"
-                android:layout_marginBottom="6dp" />
+                android:textColor="@color/text_primary"
+                android:textSize="18sp" />
 
             <EditText
                 android:id="@+id/etUsername"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="请输入账号"
+                android:layout_height="56dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_edit_text"
+                android:paddingHorizontal="16dp"
                 android:textColor="@color/text_primary"
-                android:textColorHint="@color/text_secondary"
-                android:background="@android:color/white"
-                android:padding="12dp"
-                android:singleLine="true"
+                android:textColorHint="#666666"
+                android:textSize="18sp"
+                android:hint="用户名或邮箱"
+                android:imeOptions="actionNext"
                 android:inputType="text"
-                android:layout_marginBottom="16dp" />
+                android:maxLines="1" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
                 android:text="密码"
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp"
-                android:layout_marginBottom="6dp" />
+                android:textColor="@color/text_primary"
+                android:textSize="18sp" />
 
             <EditText
                 android:id="@+id/etPassword"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="请输入密码"
+                android:layout_height="56dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_edit_text"
+                android:paddingHorizontal="16dp"
                 android:textColor="@color/text_primary"
-                android:textColorHint="@color/text_secondary"
-                android:background="@android:color/white"
-                android:padding="12dp"
-                android:singleLine="true"
+                android:textColorHint="#666666"
+                android:textSize="18sp"
+                android:hint="输入密码"
+                android:imeOptions="actionDone"
                 android:inputType="textPassword"
-                android:layout_marginBottom="24dp" />
+                android:maxLines="1" />
 
             <Button
                 android:id="@+id/btnLogin"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="登录"
+                android:layout_height="56dp"
+                android:layout_marginTop="32dp"
+                android:background="@drawable/btn_primary"
+                android:text="登 录"
                 android:textColor="@android:color/white"
-                android:backgroundTint="@color/lingxi_green"
-                android:padding="14dp"
-                android:textSize="16sp" />
-
+                android:textSize="18sp"
+                android:focusable="true" />
         </LinearLayout>
 
-        <!-- 二次验证区 -->
+        <!-- 两步验证卡片（默认隐藏） -->
         <LinearLayout
-            android:id="@+id/twoFactorForm"
-            android:layout_width="match_parent"
+            android:id="@+id/layout2fa"
+            android:layout_width="640dp"
             android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:background="@color/card_bg"
             android:orientation="vertical"
-            android:maxWidth="480dp"
+            android:padding="40dp"
             android:visibility="gone">
 
             <TextView
-                android:id="@+id/tvTwoFactorHint"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="检测到这台设备尚未通过验证，请输入发送到邮箱的验证码完成登录。"
+                android:text="两步验证"
+                android:textColor="@color/lingxi_green_light"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv2faNotice"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="#1E2B24"
+                android:padding="14dp"
                 android:textColor="@color/text_secondary"
-                android:textSize="14sp"
-                android:layout_marginBottom="20dp" />
+                android:textSize="15sp"
+                android:lineSpacingExtra="4dp" />
 
             <!-- 图形验证码 -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="图形验证码"
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp"
-                android:layout_marginBottom="6dp" />
+                android:layout_marginTop="24dp"
+                android:text="图形验证码（用于确认是真人操作）"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
                 android:orientation="horizontal"
-                android:layout_marginBottom="16dp">
+                android:gravity="center_vertical">
 
                 <WebView
                     android:id="@+id/wvCaptcha"
-                    android:layout_width="160dp"
-                    android:layout_height="56dp"
-                    android:background="@android:color/white" />
+                    android:layout_width="150dp"
+                    android:layout_height="52dp"
+                    android:background="#2A2A2A" />
 
                 <EditText
-                    android:id="@+id/etCaptcha"
+                    android:id="@+id/etCaptchaCode"
                     android:layout_width="0dp"
-                    android:layout_height="56dp"
+                    android:layout_height="52dp"
                     android:layout_weight="1"
-                    android:hint="输入图中字符"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/bg_edit_text"
+                    android:paddingHorizontal="16dp"
                     android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_secondary"
-                    android:background="@android:color/white"
-                    android:padding="12dp"
-                    android:singleLine="true"
-                    android:layout_marginStart="8dp" />
+                    android:textColorHint="#666666"
+                    android:textSize="16sp"
+                    android:hint="输入图中字符，不区分大小写"
+                    android:imeOptions="actionNext"
+                    android:inputType="text"
+                    android:maxLines="1" />
 
                 <Button
                     android:id="@+id/btnRefreshCaptcha"
                     android:layout_width="wrap_content"
-                    android:layout_height="56dp"
+                    android:layout_height="52dp"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/btn_secondary"
                     android:text="刷新"
-                    android:layout_marginStart="8dp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp"
+                    android:focusable="true" />
             </LinearLayout>
 
             <!-- 邮箱验证码 -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
                 android:text="邮箱验证码"
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp"
-                android:layout_marginBottom="6dp" />
+                android:textColor="@color/text_primary"
+                android:textSize="16sp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
                 android:orientation="horizontal"
-                android:layout_marginBottom="16dp">
+                android:gravity="center_vertical">
 
                 <EditText
                     android:id="@+id/etEmailCode"
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:layout_height="52dp"
                     android:layout_weight="1"
-                    android:hint="6 位数字"
+                    android:background="@drawable/bg_edit_text"
+                    android:paddingHorizontal="16dp"
                     android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_secondary"
-                    android:background="@android:color/white"
-                    android:padding="12dp"
-                    android:singleLine="true"
-                    android:inputType="number" />
+                    android:textColorHint="#666666"
+                    android:textSize="18sp"
+                    android:hint="6 位数字"
+                    android:imeOptions="actionNext"
+                    android:inputType="number"
+                    android:maxLength="6"
+                    android:maxLines="1" />
 
                 <Button
                     android:id="@+id/btnSendCode"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_height="52dp"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/btn_secondary"
                     android:text="发送验证码"
-                    android:layout_marginStart="8dp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp"
+                    android:focusable="true" />
             </LinearLayout>
 
             <CheckBox
-                android:id="@+id/cbRemember"
+                android:id="@+id/cbRememberDevice"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="记住这台设备，30天内不再需要验证码"
+                android:layout_marginTop="20dp"
+                android:text="记住这台设备，30 天内不再需要验证码"
                 android:textColor="@color/text_secondary"
+                android:textSize="15sp"
                 android:checked="true"
-                android:layout_marginBottom="24dp" />
+                android:focusable="true" />
 
             <Button
                 android:id="@+id/btnVerify"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="56dp"
+                android:layout_marginTop="20dp"
+                android:background="@drawable/btn_primary"
                 android:text="验证并登录"
                 android:textColor="@android:color/white"
-                android:backgroundTint="@color/lingxi_green"
-                android:padding="14dp"
-                android:textSize="16sp" />
+                android:textSize="18sp"
+                android:focusable="true" />
 
+            <TextView
+                android:id="@+id/tvBackLogin"
+                style="@style/SettingsItem"
+                android:layout_width="match_parent"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="返回上一步，重新登录" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/tvStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/lingxi_green_light"
-            android:textSize="14sp"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="20dp"
+            android:textColor="#E57373"
+            android:textSize="15sp"
+            android:visibility="gone" />
 
     </LinearLayout>
 </ScrollView>

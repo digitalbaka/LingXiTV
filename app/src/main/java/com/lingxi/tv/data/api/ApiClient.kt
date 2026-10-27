@@ -34,6 +34,14 @@ object ApiClient {
             .writeTimeout(WRITE_TIMEOUT, TimeUnit.SECONDS)
             // 连接池复用，减少内存分配
             .connectionPool(okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES))
+            // 设备标识头：两步验证「记住这台设备」信任机制依赖
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .header("X-Device-Id", AuthManager.deviceId)
+                    .header("X-Device-Label", AuthManager.deviceLabel)
+                    .build()
+                chain.proceed(request)
+            }
             // 自动附加 Authorization 头
             .addInterceptor { chain ->
                 val original = chain.request()

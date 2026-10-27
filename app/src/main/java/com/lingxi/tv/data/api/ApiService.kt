@@ -12,12 +12,15 @@ import com.lingxi.tv.data.model.CheckinResult
 import com.lingxi.tv.data.model.Conversation
 import com.lingxi.tv.data.model.DanmakuList
 import com.lingxi.tv.data.model.GatewayInfo
+import com.lingxi.tv.data.model.LoginRequest
 import com.lingxi.tv.data.model.LoginResult
 import com.lingxi.tv.data.model.PageData
 import com.lingxi.tv.data.model.Partition
 import com.lingxi.tv.data.model.SearchResult
+import com.lingxi.tv.data.model.SendCodeRequest
 import com.lingxi.tv.data.model.User
 import com.lingxi.tv.data.model.UserProfile
+import com.lingxi.tv.data.model.Verify2faRequest
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoDetail
 import retrofit2.http.Body
@@ -77,26 +80,22 @@ interface ApiService {
     @GET("/api/v1/captcha")
     suspend fun getCaptcha(): ApiResponse<Captcha>
 
-    /** 账号密码登录，可能返回 need2fa=true 需要二次验证 */
+    /** 账号密码登录，站点强制两步验证：400 响应体返回 mfaRequired/mfaTicket/emailMasked */
     @POST("/api/v1/auth/login")
     suspend fun login(
-        @Query("username") username: String,
-        @Query("password") password: String
+        @Body body: LoginRequest
     ): ApiResponse<LoginResult>
 
-    /** 发送邮箱验证码（需图形验证码） */
+    /** 发送邮箱验证码到绑定邮箱（需图形验证码） */
     @POST("/api/v1/auth/send-code")
     suspend fun sendEmailCode(
-        @Query("email") email: String? = null,
-        @Query("captchaId") captchaId: String,
-        @Query("captchaCode") captchaCode: String
+        @Body body: SendCodeRequest
     ): ApiResponse<ActionResult>
 
-    /** 验证邮箱验证码（二次验证登录） */
+    /** 验证邮箱验证码完成两步验证登录 */
     @POST("/api/v1/auth/verify-2fa")
     suspend fun verify2fa(
-        @Query("code") code: String,
-        @Query("remember") remember: Boolean = true
+        @Body body: Verify2faRequest
     ): ApiResponse<LoginResult>
 
     /** 刷新 Token */

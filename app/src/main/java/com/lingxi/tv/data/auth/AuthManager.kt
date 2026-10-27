@@ -18,6 +18,7 @@ object AuthManager {
     private const val KEY_NODE_ID = "node_id"
     private const val KEY_NODE_URL = "node_url"
     private const val KEY_NODE_NAME = "node_name"
+    private const val KEY_DEVICE_ID = "device_id"
 
     private val prefs: SharedPreferences by lazy {
         LingXiApp.get().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -58,6 +59,23 @@ object AuthManager {
 
     val isLoggedIn: Boolean get() = !token.isNullOrEmpty()
 
+    /**
+     * 稳定设备 ID（首次生成后持久化），配合「记住这台设备 30 天」两步验证信任机制，
+     * 通过 X-Device-Id / X-Device-Label 请求头上报
+     */
+    val deviceId: String
+        get() {
+            var id = prefs.getString(KEY_DEVICE_ID, null)
+            if (id.isNullOrEmpty()) {
+                id = java.util.UUID.randomUUID().toString()
+                prefs.edit().putString(KEY_DEVICE_ID, id).apply()
+            }
+            return id
+        }
+
+    /** 设备标签 */
+    val deviceLabel: String get() = "LingXi TV 客户端"
+
     /** 管理员 UID 名单（本地鉴权） */
     private val ADMIN_UIDS = setOf(1L, 3L, 12L, 62L, 106L)
 
@@ -69,6 +87,12 @@ object AuthManager {
      */
     fun getPlaybackBaseUrl(): String {
         return nodeUrl ?: ApiClient.BASE_URL
+    }
+
+    /** 保存登录状态（token + 用户信息持久化，下次启动免登录） */
+    fun saveLogin(newToken: String, newUser: User) {
+        token = newToken
+        user = newUser
     }
 
     fun logout() {
