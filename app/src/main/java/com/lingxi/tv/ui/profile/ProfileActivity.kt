@@ -11,6 +11,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
+import com.lingxi.tv.BuildConfig
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
 import com.lingxi.tv.data.api.ApiClient
@@ -164,8 +165,14 @@ class ProfileActivity : AppCompatActivity() {
 
     private fun showAbout() {
         AlertDialog.Builder(this)
-            .setTitle("关于本站")
-            .setMessage("凌汐弹幕网 LingXi\n真·非盈利虚构媒体弹幕站\n\nTV 客户端 · 与网页端同源同风格\nhttps://lingxi.xiguastudio.top")
+            .setTitle("关于本软件")
+            .setMessage(
+                "凌汐 TV  v${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）\n\n" +
+                    "凌汐弹幕网的电视端客户端，与网页端同源同风格。\n" +
+                    "支持视频浏览、弹幕播放、收藏、关注动态、消息与管理后台。\n\n" +
+                    "站点：https://lingxi.xiguastudio.top\n" +
+                    "本软件为非盈利性质，仅供学习与交流使用。"
+            )
             .setPositiveButton("知道了", null)
             .show()
     }

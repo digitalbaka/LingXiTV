@@ -1,9 +1,16 @@
 package com.lingxi.tv.data.api
 
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.reflect.TypeToken
 import com.lingxi.tv.data.auth.AuthManager
+import com.lingxi.tv.data.model.ApiResponse
+import com.lingxi.tv.data.model.LoginResult
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -25,6 +32,73 @@ object ApiClient {
         GsonBuilder()
             .serializeNulls()
             .create()
+    }
+
+    private const val TAG = "LingXiApi"
+
+    /** 专门用于刷新令牌的客户端：不带鉴权与 401 处理，避免刷新请求自身再触发刷新 */
+    private val tokenClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(CONNECT_TIMEOUT, TimeUnit.SECONDS)
+            .readTimeout(READ_TIMEOUT, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
+     * 用 refreshToken 换取新的 accessToken。
+     * 站点 accessToken 有效期只有 2 小时（JWT 的 exp - iat = 7200s），过期后所有需要
+     * 登录的接口都会返回 401 {"message":"请先登录"}，因此必须自动续期。
+     */
+    @Synchronized
+    private fun refreshAccessToken(): String? {
+        val refresh = AuthManager.refreshToken
+        if (refresh.isNullOrEmpty()) {
+            // 老版本从未保存过 refreshToken，续期无从下手，直接清空会话让界面引导重新登录
+            Log.w(TAG, "no refreshToken, clearing session")
+            AuthManager.clearSession()
+            return null
+        }
+        return try {
+            val payload = gson.toJson(mapOf("refreshToken" to refresh))
+            val request = Request.Builder()
+                .url(ApiService.BASE_URL + "/api/v1/auth/refresh")
+                .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .header("X-Device-Id", AuthManager.deviceId)
+                .header("X-Device-Label", AuthManager.DEVICE_LABEL)
+                .build()
+            tokenClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "refresh failed: HTTP ${response.code}")
+                    // refreshToken 失效（400/401）：会话无法恢复，清空登录态，界面会引导重新登录
+                    if (response.code == 400 || response.code == 401) AuthManager.clearSession()
+                    return null
+                }
+                val body = response.body?.string() ?: return null
+                val type = object : TypeToken<ApiResponse<LoginResult>>() {}.type
+                val result = gson.fromJson<ApiResponse<LoginResult>>(body, type)
+                val newToken = result?.data?.accessToken
+                if (newToken.isNullOrEmpty()) return null
+                AuthManager.token = newToken
+                result.data?.refreshToken?.let { AuthManager.refreshToken = it }
+                result.data?.user?.let { AuthManager.user = it }
+                Log.i(TAG, "accessToken refreshed")
+                newToken
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "refresh error: ${e.message}")
+            null
+        }
+    }
+
+    /** 统计该响应之前已经历的鉴权重试次数 */
+    private fun authRetryCount(response: okhttp3.Response): Int {
+        var count = 0
+        var current: okhttp3.Response? = response
+        while (current != null) {
+            count++
+            current = current.priorResponse
+        }
+        return count
     }
 
     private val okHttpClient: OkHttpClient by lazy {
@@ -56,6 +130,15 @@ object ApiClient {
                     .header("X-Device-Label", AuthManager.DEVICE_LABEL)
                     .build()
                 chain.proceed(request)
+            }
+            // 401 自动续期：用 refreshToken 换新 accessToken 后重试原请求
+            .authenticator { _, response ->
+                if (response.request.header("Authorization") == null) return@authenticator null
+                if (authRetryCount(response) > 2) return@authenticator null
+                val newToken = refreshAccessToken() ?: return@authenticator null
+                response.request.newBuilder()
+                    .header("Authorization", "Bearer $newToken")
+                    .build()
             }
             // 网络请求日志（debugBuild 输出完整请求/响应，releaseBuild 输出简洁行）
             .addInterceptor(loggingInterceptor)

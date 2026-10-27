@@ -280,7 +280,7 @@ class LoginActivity : AppCompatActivity() {
             btnVerify.isEnabled = true
             return
         }
-        AuthManager.saveLogin(token, user)
+        AuthManager.saveLogin(token, user, result.refreshToken)
         Toast.makeText(this, "登录成功，欢迎 ${user.nickname.ifEmpty { user.username }}", Toast.LENGTH_SHORT).show()
         setResult(RESULT_OK)
         finish()

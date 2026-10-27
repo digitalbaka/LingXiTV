@@ -14,6 +14,7 @@ object AuthManager {
 
     private const val PREFS_NAME = "lingxi_auth"
     private const val KEY_TOKEN = "token"
+    private const val KEY_REFRESH_TOKEN = "refresh_token"
     private const val KEY_USER = "user_json"
     private const val KEY_NODE_ID = "node_id"
     private const val KEY_NODE_URL = "node_url"
@@ -28,6 +29,13 @@ object AuthManager {
         get() = prefs.getString(KEY_TOKEN, null)
         set(value) {
             prefs.edit().putString(KEY_TOKEN, value).apply()
+        }
+
+    /** accessToken 有效期仅 2 小时，过期后由 ApiClient 用 refreshToken 自动续期 */
+    var refreshToken: String?
+        get() = prefs.getString(KEY_REFRESH_TOKEN, null)
+        set(value) {
+            prefs.edit().putString(KEY_REFRESH_TOKEN, value).apply()
         }
 
     var user: User?
@@ -93,13 +101,23 @@ object AuthManager {
         return if (url.isNullOrEmpty()) ApiClient.BASE_URL else url.trimEnd('/')
     }
 
-    /** 保存登录状态（token + 用户信息持久化，下次启动免登录） */
-    fun saveLogin(newToken: String, newUser: User) {
+    /** 保存登录状态（token + refreshToken + 用户信息持久化，下次启动免登录） */
+    fun saveLogin(newToken: String, newUser: User, newRefreshToken: String? = null) {
         token = newToken
+        refreshToken = newRefreshToken
         user = newUser
     }
 
     fun logout() {
         prefs.edit().clear().apply()
+    }
+
+    /** 仅清空登录态（保留节点选择等本地设置），用于令牌过期无法续期时 */
+    fun clearSession() {
+        prefs.edit()
+            .remove(KEY_TOKEN)
+            .remove(KEY_REFRESH_TOKEN)
+            .remove(KEY_USER)
+            .apply()
     }
 }
