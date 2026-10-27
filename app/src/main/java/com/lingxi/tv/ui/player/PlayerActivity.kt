@@ -11,6 +11,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.lingxi.tv.LingXiApp
@@ -19,6 +21,7 @@ import com.lingxi.tv.data.auth.AuthManager
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoQuality
 import com.lingxi.tv.player.DanmakuView
+import com.lingxi.tv.player.VideoCacheManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -88,6 +91,14 @@ class PlayerActivity : AppCompatActivity() {
         loadVideo(videoId)
     }
 
+    /**
+     * 构建带磁盘缓存的媒体源，重复播放时直接读本地缓存
+     */
+    private fun buildMediaSource(url: String): MediaSource {
+        return ProgressiveMediaSource.Factory(VideoCacheManager.cacheDataSourceFactory(this))
+            .createMediaSource(MediaItem.fromUri(Uri.parse(url)))
+    }
+
     private fun loadVideo(videoId: Long) {
         lifecycleScope.launch {
             val result = repository.getVideoDetail(videoId)
@@ -113,7 +124,7 @@ class PlayerActivity : AppCompatActivity() {
 
         player = ExoPlayer.Builder(this).build().also { exoPlayer ->
             playerView.player = exoPlayer
-            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(videoUrl)))
+            exoPlayer.setMediaSource(buildMediaSource(videoUrl))
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
 
@@ -155,7 +166,7 @@ class PlayerActivity : AppCompatActivity() {
             retryCount++
             Toast.makeText(this, "播放出错，第 $retryCount 次重试...", Toast.LENGTH_SHORT).show()
             val url = getCurrentQualityUrl() ?: video?.getFullSrcUrl(AuthManager.getPlaybackBaseUrl()) ?: return
-            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
+            exoPlayer.setMediaSource(buildMediaSource(url))
             exoPlayer.prepare()
             exoPlayer.seekTo(position)
             exoPlayer.playWhenReady = true
@@ -170,7 +181,7 @@ class PlayerActivity : AppCompatActivity() {
             val fallbackLabel = qualityList[fallbackIndex].label
             Toast.makeText(this, "当前清晰度不可用，切换到 $fallbackLabel", Toast.LENGTH_LONG).show()
             val url = getCurrentQualityUrl() ?: return
-            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
+            exoPlayer.setMediaSource(buildMediaSource(url))
             exoPlayer.prepare()
             exoPlayer.seekTo(position)
             exoPlayer.playWhenReady = true
@@ -194,7 +205,7 @@ class PlayerActivity : AppCompatActivity() {
         retryCount = 0 // 手动切换时重置重试计数
 
         val url = getCurrentQualityUrl() ?: return
-        exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
+        exoPlayer.setMediaSource(buildMediaSource(url))
         exoPlayer.prepare()
         exoPlayer.seekTo(position)
         exoPlayer.playWhenReady = true
