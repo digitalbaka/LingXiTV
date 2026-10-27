@@ -38,7 +38,7 @@ object ApiClient {
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
                     .header("X-Device-Id", AuthManager.deviceId)
-                    .header("X-Device-Label", AuthManager.deviceLabel)
+                    .header("X-Device-Label", AuthManager.DEVICE_LABEL)
                     .build()
                 chain.proceed(request)
             }

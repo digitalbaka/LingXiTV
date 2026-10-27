@@ -11,8 +11,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.lingxi.tv.LingXiApp
@@ -92,10 +92,13 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * 构建带磁盘缓存的媒体源，重复播放时直接读本地缓存
+     * 构建媒体源：DefaultMediaSourceFactory 按 URL 自动检测
+     * HLS (.m3u8) → HlsMediaSource（按分片缓冲，远距离 seek 正常）
+     * 直链 (.mp4 等) → ProgressiveMediaSource
+     * 都走磁盘缓存（CacheDataSource 按 segment/byte 缓存）
      */
     private fun buildMediaSource(url: String): MediaSource {
-        return ProgressiveMediaSource.Factory(VideoCacheManager.cacheDataSourceFactory(this))
+        return DefaultMediaSourceFactory(VideoCacheManager.cacheDataSourceFactory(this))
             .createMediaSource(MediaItem.fromUri(Uri.parse(url)))
     }
 

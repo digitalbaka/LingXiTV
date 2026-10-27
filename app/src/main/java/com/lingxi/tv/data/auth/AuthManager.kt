@@ -73,8 +73,10 @@ object AuthManager {
             return id
         }
 
-    /** 设备标签 */
-    val deviceLabel: String get() = "LingXi TV 客户端"
+    /**
+     * 设备标签（必须纯 ASCII，HTTP header 值不允许非 ASCII 字符）
+     */
+    const val DEVICE_LABEL: String = "LingXiTV"
 
     /** 管理员 UID 名单（本地鉴权） */
     private val ADMIN_UIDS = setOf(1L, 3L, 12L, 62L, 106L)
