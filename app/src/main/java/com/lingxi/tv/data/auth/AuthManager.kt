@@ -85,10 +85,12 @@ object AuthManager {
     val isAdmin: Boolean get() = isLoggedIn && (user?.id ?: 0L) in ADMIN_UIDS
 
     /**
-     * 获取播放用的基础 URL：选中节点则用节点 URL，否则用主站
+     * 获取播放用的基础 URL：选中节点则用节点 URL，否则用主站。
+     * 节点 URL 为空（切换异常）时回退主站，避免拼出非法地址导致无法播放。
      */
     fun getPlaybackBaseUrl(): String {
-        return nodeUrl ?: ApiClient.BASE_URL
+        val url = nodeUrl
+        return if (url.isNullOrEmpty()) ApiClient.BASE_URL else url.trimEnd('/')
     }
 
     /** 保存登录状态（token + 用户信息持久化，下次启动免登录） */

@@ -2,6 +2,7 @@ package com.lingxi.tv.ui.player
 
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.widget.Toast
@@ -20,6 +21,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
+import com.lingxi.tv.data.api.ApiClient
 import com.lingxi.tv.data.auth.AuthManager
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoQuality
@@ -32,19 +34,26 @@ import kotlinx.coroutines.launch
 
 /**
  * 视频播放页
- * 功能：ExoPlayer 播放 + 弹幕渲染 + 清晰度切换 + 画面比例 + 弹幕开关
+ *
+ * 普通模式：播放单个视频，上键呼出设置，下键呼出控制面板。
+ * 关注动态模式（EXTRA_FEED_MODE）：全屏铺满，按向下键切换到下一条关注动态，
+ * 列表到底会自动加载下一页，可以一直往下看。
  *
  * 遥控器操作：
  *   左/右   快退/快进 10 秒
  *   OK      播放/暂停
  *   上       打开设置菜单（清晰度/画面比例/弹幕/循环）
- *   菜单键   打开设置菜单
- *   下       呼出播放控制面板（暂停、进度条）
+ *   下       普通模式呼出控制面板；关注动态模式切下一条
  */
 class PlayerActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_VIDEO_ID = "extra_video_id"
+        const val EXTRA_FEED_MODE = "extra_feed_mode"
+        const val EXTRA_START_INDEX = "extra_start_index"
+
+        private const val FEED_PAGE_SIZE = 30
+        private const val TAG = "LingXiPlayer"
 
         // 画面比例模式（Media3 1.2.0 支持的模式）
         private val RESIZE_MODES = intArrayOf(
@@ -70,6 +79,21 @@ class PlayerActivity : AppCompatActivity() {
     private var maxRetryCount: Int = 3
     private var loopEnabled: Boolean = false
 
+    /** 当前清晰度/画质全部失败后，是否已回退主站 */
+    private var useMainSiteFallback: Boolean = false
+    /** 本次播放是否已经尝试过换清晰度 */
+    private var triedQualityFallback: Boolean = false
+    /** 本次页面是否已经做过节点授权 */
+    private var nodeHandoffDone: Boolean = false
+
+    // ==================== 关注动态模式 ====================
+    private var feedMode: Boolean = false
+    private var feedIndex: Int = 0
+    private var feedPage: Int = 1
+    private var feedHasMore: Boolean = false
+    private var feedLoading: Boolean = false
+    private val feedVideos = mutableListOf<Video>()
+
     private var progressUpdateJob: Job? = null
     private var optionsDialog: AlertDialog? = null
 
@@ -86,6 +110,16 @@ class PlayerActivity : AppCompatActivity() {
 
         playerView = findViewById(R.id.player_view)
         danmakuView = findViewById(R.id.danmaku_view)
+
+        feedMode = intent.getBooleanExtra(EXTRA_FEED_MODE, false)
+        if (feedMode) {
+            // 关注动态：铺满全屏（裁剪边缘），而不是留黑边
+            playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            currentResizeMode = 1
+            feedIndex = intent.getIntExtra(EXTRA_START_INDEX, 0).coerceAtLeast(0)
+            loadFeed()
+            return
+        }
 
         val videoId = intent.getLongExtra(EXTRA_VIDEO_ID, -1)
         if (videoId <= 0) {
@@ -108,12 +142,83 @@ class PlayerActivity : AppCompatActivity() {
             .createMediaSource(MediaItem.fromUri(Uri.parse(url)))
     }
 
+    // ==================== 关注动态 ====================
+
+    private fun loadFeed() {
+        lifecycleScope.launch {
+            val result = repository.getFollowingVideos(1, FEED_PAGE_SIZE)
+            val page = result.getOrNull()
+            if (page == null) {
+                Toast.makeText(this@PlayerActivity,
+                    "加载关注动态失败：${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                finish()
+                return@launch
+            }
+            feedVideos.addAll(page.items.filter { it.isVideo })
+            feedPage = 1
+            feedHasMore = page.hasMore
+            if (feedVideos.isEmpty()) {
+                Toast.makeText(this@PlayerActivity, "关注的 UP 主还没有新动态", Toast.LENGTH_SHORT).show()
+                finish()
+                return@launch
+            }
+            if (feedIndex >= feedVideos.size) feedIndex = 0
+            playFeed(feedIndex)
+        }
+    }
+
+    private fun playFeed(index: Int) {
+        val v = feedVideos.getOrNull(index) ?: return
+        feedIndex = index
+        Toast.makeText(this, "${index + 1}/${feedVideos.size} ${v.title}", Toast.LENGTH_SHORT).show()
+        loadVideo(v.id)
+    }
+
+    /** 按下键：切换下一条，必要时加载下一页 */
+    private fun nextFeed() {
+        if (feedIndex + 1 < feedVideos.size) {
+            playFeed(feedIndex + 1)
+            return
+        }
+        if (!feedHasMore) {
+            Toast.makeText(this, "已经是最后一条关注动态", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (feedLoading) return
+        feedLoading = true
+        lifecycleScope.launch {
+            val result = repository.getFollowingVideos(feedPage + 1, FEED_PAGE_SIZE)
+            feedLoading = false
+            val page = result.getOrNull()
+            if (page == null) {
+                Toast.makeText(this@PlayerActivity, "加载更多失败", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            feedPage++
+            feedHasMore = page.hasMore
+            feedVideos.addAll(page.items.filter { it.isVideo })
+            if (feedIndex + 1 < feedVideos.size) {
+                playFeed(feedIndex + 1)
+            } else {
+                Toast.makeText(this@PlayerActivity, "已经是最后一条关注动态", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // ==================== 播放 ====================
+
     private fun loadVideo(videoId: Long) {
         lifecycleScope.launch {
+            ensureNodeHandoff()
             val result = repository.getVideoDetail(videoId)
             result.onSuccess { detail ->
-                video = detail.video
-                setupPlayer(detail.video)
+                val v = detail.video
+                if (v == null) {
+                    Toast.makeText(this@PlayerActivity, "视频不存在", Toast.LENGTH_SHORT).show()
+                    return@onSuccess
+                }
+                video = v
+                setupPlayer(v)
                 loadDanmaku(videoId)
             }.onFailure {
                 Toast.makeText(this@PlayerActivity, "加载失败: ${it.message}", Toast.LENGTH_SHORT).show()
@@ -121,15 +226,53 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 切换节点后必须先向 /gateway/handoff 授权当前 IP，否则节点会返回
+     * HTTP 200 + {code:40301} 的 JSON，ExoPlayer 无法解析表现为无限加载。
+     * 授权失败时直接回退主站，保证至少能播主站资源。
+     */
+    private suspend fun ensureNodeHandoff() {
+        if (nodeHandoffDone || useMainSiteFallback) return
+        if (AuthManager.nodeId <= 0) {
+            nodeHandoffDone = true
+            return
+        }
+        val result = repository.handoff(AuthManager.nodeId)
+        if (result.isSuccess) {
+            nodeHandoffDone = true
+            Log.d(TAG, "handoff ok: nodeId=${AuthManager.nodeId}")
+        } else {
+            // 节点授权失败：本次播放改用主站，避免 40301 造成的无限缓冲
+            useMainSiteFallback = true
+            val msg = result.exceptionOrNull()?.message ?: "未知错误"
+            Log.w(TAG, "handoff failed: $msg")
+            Toast.makeText(this, "节点授权失败，已改用主站播放", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun setupPlayer(video: Video?) {
         if (video == null) return
+
+        // 切换下一条时释放旧播放器，避免多个 ExoPlayer 同时占用解码器
+        player?.release()
+        player = null
+
+        retryCount = 0
+        triedQualityFallback = false
+        // 注意：不要在这里重置 useMainSiteFallback。节点授权失败后整页都应走主站，
+        // 否则每切一条视频又会被打回不可用的节点地址。
 
         qualityList = video.qualityOptions
         // 优先选择 720p
         currentQualityIndex = qualityList.indexOfFirst { it.height == 720 }
         if (currentQualityIndex < 0) currentQualityIndex = 0
 
-        val videoUrl = getCurrentQualityUrl() ?: video.getFullSrcUrl(AuthManager.getPlaybackBaseUrl())
+        val videoUrl = currentPlayUrl()
+        if (videoUrl == null) {
+            Toast.makeText(this, "该视频没有可播放地址", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Log.d(TAG, "play videoId=${video.id} url=$videoUrl")
 
         player = ExoPlayer.Builder(this).build().also { exoPlayer ->
             playerView.player = exoPlayer
@@ -147,6 +290,10 @@ class PlayerActivity : AppCompatActivity() {
                         Player.STATE_ENDED -> {
                             danmakuView.setPlaying(false)
                             stopProgressUpdate()
+                            // 关注动态：一条播完自动切下一条
+                            if (feedMode) {
+                                nextFeed()
+                            }
                         }
                     }
                 }
@@ -162,45 +309,74 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** 当前播放基准地址：节点失效时回退主站 */
+    private fun playbackBase(): String {
+        return if (useMainSiteFallback) ApiClient.BASE_URL else AuthManager.getPlaybackBaseUrl()
+    }
+
+    private fun currentPlayUrl(): String? {
+        val base = playbackBase()
+        val qualityUrl = qualityList.getOrNull(currentQualityIndex)
+            ?.takeIf { it.url.isNotEmpty() }
+            ?.getFullUrl(base)
+        if (qualityUrl != null) return qualityUrl
+        val src = video?.src.orEmpty()
+        if (src.isEmpty()) return null
+        return video?.getFullSrcUrl(base)
+    }
+
+    private fun playFrom(position: Long) {
+        val exoPlayer = player ?: return
+        val url = currentPlayUrl() ?: return
+        exoPlayer.setMediaSource(buildMediaSource(url))
+        exoPlayer.prepare()
+        if (position > 0) exoPlayer.seekTo(position)
+        exoPlayer.playWhenReady = true
+    }
+
     /**
-     * 处理播放错误（如 502）：先重试当前清晰度，再降级到其他清晰度
+     * 处理播放错误：
+     * 0. 当前正在用节点——立即回退主站（节点未授权时返回 40301 JSON，重试没有意义）
+     * 1. 主站地址重试 3 次
+     * 2. 换一个清晰度
      */
     private fun handlePlaybackError(error: androidx.media3.common.PlaybackException) {
         val exoPlayer = player ?: return
         val errorMsg = error.localizedMessage ?: "未知错误"
-        val position = exoPlayer.currentPosition
+        val position = exoPlayer.currentPosition.coerceAtLeast(0L)
 
-        // 先重试当前清晰度
-        if (retryCount < maxRetryCount) {
-            retryCount++
-            Toast.makeText(this, "播放出错，第 $retryCount 次重试...", Toast.LENGTH_SHORT).show()
-            val url = getCurrentQualityUrl() ?: video?.getFullSrcUrl(AuthManager.getPlaybackBaseUrl()) ?: return
-            exoPlayer.setMediaSource(buildMediaSource(url))
-            exoPlayer.prepare()
-            exoPlayer.seekTo(position)
-            exoPlayer.playWhenReady = true
+        if (AuthManager.nodeId > 0 && !useMainSiteFallback) {
+            useMainSiteFallback = true
+            triedQualityFallback = false
+            retryCount = 0
+            currentQualityIndex = qualityList.indexOfFirst { it.height == 720 }.coerceAtLeast(0)
+            Log.w(TAG, "node playback failed, fallback to main site: $errorMsg")
+            Toast.makeText(this, "当前节点不可用，已回退主站", Toast.LENGTH_LONG).show()
+            playFrom(position)
             return
         }
 
-        // 重试失败，尝试降级到其他清晰度
-        retryCount = 0
-        val fallbackIndex = qualityList.indices.firstOrNull { it != currentQualityIndex }
-        if (fallbackIndex != null) {
-            currentQualityIndex = fallbackIndex
-            val fallbackLabel = qualityList[fallbackIndex].label
-            Toast.makeText(this, "当前清晰度不可用，切换到 $fallbackLabel", Toast.LENGTH_LONG).show()
-            val url = getCurrentQualityUrl() ?: return
-            exoPlayer.setMediaSource(buildMediaSource(url))
-            exoPlayer.prepare()
-            exoPlayer.seekTo(position)
-            exoPlayer.playWhenReady = true
-        } else {
-            Toast.makeText(this, "播放失败: $errorMsg", Toast.LENGTH_LONG).show()
+        if (retryCount < maxRetryCount) {
+            retryCount++
+            Toast.makeText(this, "播放出错，第 $retryCount 次重试...", Toast.LENGTH_SHORT).show()
+            playFrom(position)
+            return
         }
-    }
 
-    private fun getCurrentQualityUrl(): String? {
-        return qualityList.getOrNull(currentQualityIndex)?.getFullUrl(AuthManager.getPlaybackBaseUrl())
+        if (!triedQualityFallback) {
+            val fallbackIndex = qualityList.indices.firstOrNull { it != currentQualityIndex }
+            if (fallbackIndex != null) {
+                triedQualityFallback = true
+                currentQualityIndex = fallbackIndex
+                retryCount = 0
+                val fallbackLabel = qualityList[fallbackIndex].label
+                Toast.makeText(this, "当前清晰度不可用，切换到 $fallbackLabel", Toast.LENGTH_LONG).show()
+                playFrom(position)
+                return
+            }
+        }
+
+        Toast.makeText(this, "播放失败: $errorMsg", Toast.LENGTH_LONG).show()
     }
 
     /**
@@ -212,13 +388,9 @@ class PlayerActivity : AppCompatActivity() {
         val position = exoPlayer.currentPosition
         currentQualityIndex = index
         retryCount = 0 // 手动切换时重置重试计数
+        triedQualityFallback = false
 
-        val url = getCurrentQualityUrl() ?: return
-        exoPlayer.setMediaSource(buildMediaSource(url))
-        exoPlayer.prepare()
-        exoPlayer.seekTo(position)
-        exoPlayer.playWhenReady = true
-
+        playFrom(position)
         danmakuView.seekTo(position)
         Toast.makeText(this, "已切换到 ${qualityList[index].label}", Toast.LENGTH_SHORT).show()
     }
@@ -327,7 +499,7 @@ class PlayerActivity : AppCompatActivity() {
 
     /**
      * 使用 dispatchKeyEvent 在 View 层拦截之前捕获按键，
-     * 避免 PlayerView 的播放控制器吞掉菜单键/上键
+     * 避免 PlayerView 的播放控制器吞掉菜单键/上键/下键
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
@@ -337,7 +509,11 @@ class PlayerActivity : AppCompatActivity() {
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    playerView.showController()
+                    if (feedMode) {
+                        nextFeed()
+                    } else {
+                        playerView.showController()
+                    }
                     return true
                 }
             }

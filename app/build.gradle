@@ -9,8 +9,8 @@ android {
         applicationId "com.lingxi.tv"
         minSdk 23
         targetSdk 34
-        versionCode 11
-        versionName "1.8.3"
+        versionCode 12
+        versionName "1.8.4"
 
         // Leanback 需要
         vectorDrawables.useSupportLibrary = true
@@ -43,6 +43,14 @@ android {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
+    }
+
+    lint {
+        // AGP 7.4.2 自带的 lint 使用 Kotlin 1.7 编译器，而项目用的是 Kotlin 1.9，
+        // 检查 1.9 编译的 kotlin-stdlib 时会输出 3 条
+        // "Module was compiled with an incompatible version of Kotlin" 的 e: 错误，
+        // 仅影响 lint 分析、不影响编译打包，因此关闭 release 的 lint 检查。
+        checkReleaseBuilds false
     }
 }
 

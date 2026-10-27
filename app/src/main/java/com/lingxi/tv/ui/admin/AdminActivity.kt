@@ -19,9 +19,11 @@ import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
 import com.lingxi.tv.data.auth.AuthManager
 import com.lingxi.tv.data.model.AdminComment
+import com.lingxi.tv.data.model.AdminDanmaku
 import com.lingxi.tv.data.model.AdminReport
 import com.lingxi.tv.data.model.AdminUser
 import com.lingxi.tv.data.model.AdminVideo
+import com.lingxi.tv.data.model.displayName
 import com.lingxi.tv.ui.player.PlayerActivity
 import kotlinx.coroutines.launch
 
@@ -84,6 +86,11 @@ class AdminActivity : AppCompatActivity() {
             } else false
         }
 
+        // 电视端遥控器：默认聚焦第一个模块标签
+        findViewById<Button>(R.id.tabVideos).post {
+            findViewById<Button>(R.id.tabVideos).requestFocus()
+        }
+
         loadOverview()
         switchModule(Module.VIDEOS)
     }
@@ -91,11 +98,13 @@ class AdminActivity : AppCompatActivity() {
     private fun loadOverview() {
         lifecycleScope.launch {
             repository.getAdminOverview().onSuccess { o ->
-                tvOverview.text = "待审稿件 ${o.pendingVideos} · 待处理举报 ${o.pendingReports}" +
-                    " · 待审核认证 ${o.pendingVerifications} · 创作者申请 ${o.pendingCreators}\n" +
-                    "用户 ${o.totalUsers} · 稿件 ${o.totalVideos}" +
-                    " · 今日新增用户 ${o.todayUsers} · 稿件 ${o.todayVideos}" +
-                    " · 弹幕 ${o.todayDanmaku} · 评论 ${o.todayComments}"
+                val t = o.totals
+                if (t == null) {
+                    tvOverview.text = "总览暂无数据"
+                    return@onSuccess
+                }
+                tvOverview.text = "待审稿件 ${t.pending} · 用户 ${t.users} · 稿件 ${t.videos}\n" +
+                    "弹幕 ${t.danmaku} · 评论 ${t.comments} · 关注 ${t.follows} · 播放 ${t.views}"
             }.onFailure {
                 tvOverview.text = "总览加载失败：${it.message}"
             }
@@ -109,6 +118,7 @@ class AdminActivity : AppCompatActivity() {
             Module.COMMENTS, Module.DANMAKU, Module.USERS -> View.VISIBLE
             else -> View.GONE
         }
+        if (searchRow.visibility != View.VISIBLE) etSearch.setText("")
         loadModule()
     }
 
@@ -118,33 +128,60 @@ class AdminActivity : AppCompatActivity() {
             when (module) {
                 Module.VIDEOS -> repository.getAdminVideos().onSuccess { page ->
                     showItems(page.items.map {
-                        AdminItem(it.title, "${it.author} · UID${it.uid} · ${it.partition} · ${it.status}", it)
+                        AdminItem(
+                            it.title,
+                            "${it.up?.nickname ?: "未知UP"} · ${it.partition} · ${it.statusLabel}",
+                            it
+                        )
                     })
                 }
                 Module.COMMENTS -> repository.getAdminComments(keyword).onSuccess { page ->
                     showItems(page.items.map {
-                        AdminItem(it.content, "${it.nickname} · 来自《${it.videoTitle}》", it)
+                        val name = it.author.displayName()
+                        AdminItem(
+                            it.content,
+                            "$name · 来自《${it.video?.title ?: "未知稿件"}》",
+                            it
+                        )
                     })
                 }
                 Module.DANMAKU -> repository.getAdminDanmaku(keyword).onSuccess { page ->
                     showItems(page.items.map {
-                        AdminItem(it.content, "${it.nickname} · 视频 ${it.videoId}", it)
+                        val name = it.author.displayName()
+                        val videoTitle = it.video?.title?.ifEmpty { null } ?: "未知稿件"
+                        AdminItem(
+                            it.content,
+                            "$name · 视频《$videoTitle》",
+                            it
+                        )
                     })
                 }
                 Module.REPORTS -> repository.getAdminReports().onSuccess { page ->
                     showItems(page.items.map {
-                        AdminItem("${it.targetType}: ${it.reason}",
-                            "举报人：${it.reporter} · ${it.status}", it)
+                        val reporter = it.reporter.displayName()
+                        AdminItem(
+                            "${it.targetType}: ${it.reason}",
+                            "举报人：$reporter · ${it.status}",
+                            it
+                        )
                     })
                 }
                 Module.USERS -> repository.getAdminUsers(keyword).onSuccess { page ->
                     showItems(page.items.map {
-                        val roleLabel = if (it.role == "admin") "管理员" else if (it.banned) "已封禁" else "普通用户"
-                        AdminItem("${it.nickname.ifEmpty { it.username }}（UID ${it.id}）",
-                            "@${it.username} · LV${it.level} · ${it.exp} 经验 · 稿件 ${it.videoCount} · $roleLabel", it)
+                        val roleLabel = when {
+                            it.isAdmin -> "管理员"
+                            it.banned -> "已封禁"
+                            else -> "普通用户"
+                        }
+                        AdminItem(
+                            "${it.nickname.ifEmpty { it.username }}（UID ${it.id}）",
+                            "@${it.username} · LV${it.level} · 稿件 ${it.videoCount} · 被举报 ${it.reportedCount} · $roleLabel",
+                            it
+                        )
                     })
                 }
             }.onFailure {
+                showItems(emptyList())
                 Toast.makeText(this@AdminActivity, "加载失败：${it.message}", Toast.LENGTH_SHORT).show()
             }
         }
@@ -153,6 +190,12 @@ class AdminActivity : AppCompatActivity() {
     private fun showItems(items: List<AdminItem>) {
         adapter.setData(items)
         tvEmpty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+        // 列表加载完成后，焦点落到第一条，方便遥控器直接操作
+        if (items.isNotEmpty()) {
+            rvAdmin.post {
+                rvAdmin.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
+            }
+        }
     }
 
     /** 点击列表项，根据类型弹出对应操作 */
@@ -160,22 +203,26 @@ class AdminActivity : AppCompatActivity() {
         when (val data = item.data) {
             is AdminVideo -> showVideoActions(data)
             is AdminComment -> showCommentActions(data)
+            is AdminDanmaku -> showDanmakuActions(data)
             is AdminReport -> showReportActions(data)
             is AdminUser -> showUserActions(data)
         }
     }
 
     private fun showVideoActions(video: AdminVideo) {
-        val options = arrayOf("查看播放", "通过", "驳回", "置顶/取消置顶")
+        val pinLabel = if (video.pinned) "取消置顶" else "置顶"
+        val options = arrayOf("查看播放", "通过", "驳回", pinLabel)
         AlertDialog.Builder(this)
             .setTitle(video.title)
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> startActivity(Intent(this, PlayerActivity::class.java)
-                        .putExtra(PlayerActivity.EXTRA_VIDEO_ID, video.id))
-                    1 -> doAction({ repository.reviewVideo(video.id, "approve") }, "已通过")
+                    0 -> openVideo(video.id)
+                    1 -> doAction({ repository.reviewVideo(video.id, true) }, "已通过")
                     2 -> showRejectDialog(video)
-                    3 -> doAction({ repository.pinVideo(video.id) }, "已操作")
+                    3 -> doAction(
+                        { repository.pinVideo(video.id, !video.pinned) },
+                        if (video.pinned) "已取消置顶" else "已置顶"
+                    )
                 }
             }
             .setNegativeButton("关闭", null)
@@ -189,20 +236,38 @@ class AdminActivity : AppCompatActivity() {
             .setView(et)
             .setPositiveButton("确认驳回") { _, _ ->
                 val reason = et.text.toString().trim().ifEmpty { null }
-                doAction({ repository.reviewVideo(video.id, "reject", reason) }, "已驳回")
+                doAction({ repository.reviewVideo(video.id, false, reason) }, "已驳回")
             }
             .setNegativeButton("取消", null)
             .show()
     }
 
     private fun showCommentActions(comment: AdminComment) {
+        val videoId = comment.video?.id ?: 0L
+        val options = if (videoId > 0) arrayOf("查看稿件", "删除") else arrayOf("删除")
         AlertDialog.Builder(this)
             .setTitle("评论：${comment.content}")
-            .setItems(arrayOf("查看稿件", "删除")) { _, which ->
-                when (which) {
-                    0 -> startActivity(Intent(this, PlayerActivity::class.java)
-                        .putExtra(PlayerActivity.EXTRA_VIDEO_ID, comment.videoId))
-                    1 -> doAction({ repository.deleteComment(comment.id) }, "已删除")
+            .setItems(options) { _, which ->
+                if (videoId > 0 && which == 0) {
+                    openVideo(videoId)
+                } else {
+                    doAction({ repository.deleteComment(comment.id) }, "已删除")
+                }
+            }
+            .setNegativeButton("关闭", null)
+            .show()
+    }
+
+    private fun showDanmakuActions(danmaku: AdminDanmaku) {
+        val videoId = danmaku.video?.id ?: 0L
+        val options = if (videoId > 0) arrayOf("查看稿件", "删除") else arrayOf("删除")
+        AlertDialog.Builder(this)
+            .setTitle("弹幕：${danmaku.content}")
+            .setItems(options) { _, which ->
+                if (videoId > 0 && which == 0) {
+                    openVideo(videoId)
+                } else {
+                    doAction({ repository.deleteDanmaku(danmaku.id) }, "已删除")
                 }
             }
             .setNegativeButton("关闭", null)
@@ -210,14 +275,17 @@ class AdminActivity : AppCompatActivity() {
     }
 
     private fun showReportActions(report: AdminReport) {
+        val videoId = report.target?.videoId ?: 0L
+        val targetTitle = report.target?.title ?: report.target?.content ?: "-"
+        val options = arrayOf("查看对象", "删除违规内容", "忽略")
         AlertDialog.Builder(this)
-            .setTitle("举报：${report.reason}")
-            .setItems(arrayOf("查看对象", "标记已处理", "忽略")) { _, which ->
+            .setTitle("举报：${report.reason}\n$targetTitle")
+            .setItems(options) { _, which ->
                 when (which) {
-                    0 -> startActivity(Intent(this, PlayerActivity::class.java)
-                        .putExtra(PlayerActivity.EXTRA_VIDEO_ID, report.targetId))
-                    1 -> doAction({ repository.handleReport(report.id, "processed") }, "已处理")
-                    2 -> doAction({ repository.handleReport(report.id, "ignored") }, "已忽略")
+                    0 -> if (videoId > 0) openVideo(videoId)
+                    else Toast.makeText(this@AdminActivity, "该举报对象不是视频", Toast.LENGTH_SHORT).show()
+                    1 -> doAction({ repository.handleReport(report.id, "delete") }, "已删除违规内容")
+                    2 -> doAction({ repository.handleReport(report.id, "ignore") }, "已忽略")
                 }
             }
             .setNegativeButton("关闭", null)
@@ -226,19 +294,26 @@ class AdminActivity : AppCompatActivity() {
 
     private fun showUserActions(user: AdminUser) {
         val banLabel = if (user.banned) "解封" else "封禁"
-        val roleLabel = if (user.role == "admin") "取消管理员" else "设为管理员"
+        val roleLabel = if (user.isAdmin) "取消管理员" else "设为管理员"
         AlertDialog.Builder(this)
             .setTitle("${user.nickname.ifEmpty { user.username }}（UID ${user.id}）")
             .setItems(arrayOf(banLabel, roleLabel)) { _, which ->
                 when (which) {
-                    0 -> doAction({ repository.banUser(user.id) }, "已$banLabel")
-                    1 -> doAction({
-                        repository.setUserRole(user.id, if (user.role == "admin") "user" else "admin")
-                    }, "已操作")
+                    0 -> doAction({ repository.banUser(user.id, !user.banned) }, "已$banLabel")
+                    1 -> doAction({ repository.setUserRole(user.id, !user.isAdmin) }, "已操作")
                 }
             }
             .setNegativeButton("关闭", null)
             .show()
+    }
+
+    private fun openVideo(videoId: Long) {
+        if (videoId <= 0) {
+            Toast.makeText(this, "视频ID无效", Toast.LENGTH_SHORT).show()
+            return
+        }
+        startActivity(Intent(this, PlayerActivity::class.java)
+            .putExtra(PlayerActivity.EXTRA_VIDEO_ID, videoId))
     }
 
     private fun doAction(action: suspend () -> Result<com.lingxi.tv.data.model.ActionResult>, successMsg: String) {

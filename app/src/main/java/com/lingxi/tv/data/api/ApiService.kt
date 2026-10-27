@@ -2,37 +2,49 @@ package com.lingxi.tv.data.api
 
 import com.lingxi.tv.data.model.ActionResult
 import com.lingxi.tv.data.model.AdminComment
+import com.lingxi.tv.data.model.AdminDanmaku
 import com.lingxi.tv.data.model.AdminOverview
+import com.lingxi.tv.data.model.AdminQueue
 import com.lingxi.tv.data.model.AdminReport
 import com.lingxi.tv.data.model.AdminUser
-import com.lingxi.tv.data.model.AdminVideo
 import com.lingxi.tv.data.model.ApiResponse
+import com.lingxi.tv.data.model.BanRequest
 import com.lingxi.tv.data.model.Captcha
 import com.lingxi.tv.data.model.CheckinResult
 import com.lingxi.tv.data.model.Conversation
 import com.lingxi.tv.data.model.DanmakuList
+import com.lingxi.tv.data.model.FavoriteFolder
+import com.lingxi.tv.data.model.FavoriteRequest
+import com.lingxi.tv.data.model.FavoriteResult
 import com.lingxi.tv.data.model.GatewayInfo
+import com.lingxi.tv.data.model.HandleReportRequest
+import com.lingxi.tv.data.model.HandoffRequest
+import com.lingxi.tv.data.model.HandoffResult
 import com.lingxi.tv.data.model.LoginRequest
 import com.lingxi.tv.data.model.LoginResult
+import com.lingxi.tv.data.model.MeResponse
 import com.lingxi.tv.data.model.PageData
 import com.lingxi.tv.data.model.Partition
+import com.lingxi.tv.data.model.PinRequest
+import com.lingxi.tv.data.model.ReviewRequest
+import com.lingxi.tv.data.model.RoleRequest
 import com.lingxi.tv.data.model.SearchResult
 import com.lingxi.tv.data.model.SendCodeRequest
-import com.lingxi.tv.data.model.User
-import com.lingxi.tv.data.model.UserProfile
+import com.lingxi.tv.data.model.SpaceInfo
 import com.lingxi.tv.data.model.Verify2faRequest
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoDetail
 import retrofit2.http.Body
-import retrofit2.http.Field
-import retrofit2.http.FormUrlEncoded
+import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
  * 凌汐弹幕网 API 服务
+ * 端点与参数以线上网页端/手机端实际请求为准
  */
 interface ApiService {
 
@@ -116,6 +128,14 @@ interface ApiService {
     @GET("/api/v1/gateway/probe")
     suspend fun probeNode(@Query("nodeId") nodeId: Long): ApiResponse<Any>
 
+    /**
+     * 节点授权：把当前公网 IP 授权到目标节点。
+     * 未调用时节点对任意请求返回 HTTP 200 + {code:40301}，播放器会表现为无限加载。
+     * nodeId = 0 表示回到主站。
+     */
+    @POST("/api/v1/gateway/handoff")
+    suspend fun handoff(@Body body: HandoffRequest): ApiResponse<HandoffResult>
+
     // ==================== 用户内容（需登录）====================
 
     /** 观看历史 */
@@ -125,15 +145,18 @@ interface ApiService {
         @Query("pageSize") pageSize: Int = 20
     ): ApiResponse<PageData<Video>>
 
-    /** 收藏夹列表 */
-    @GET("/api/v1/favorites/folders")
-    suspend fun getFavoriteFolders(): ApiResponse<PageData<Any>>
+    /** 某个用户的收藏夹列表：GET /users/{uid}/folders */
+    @GET("/api/v1/users/{uid}/folders")
+    suspend fun getFavoriteFolders(
+        @Path("uid") uid: Long
+    ): ApiResponse<PageData<FavoriteFolder>>
 
-    /** 收藏的视频 */
-    @GET("/api/v1/favorites")
-    suspend fun getFavorites(
+    /** 收藏夹内的视频：GET /favorites/folders/{folderId}/items */
+    @GET("/api/v1/favorites/folders/{folderId}/items")
+    suspend fun getFavoriteFolderItems(
+        @Path("folderId") folderId: Long,
         @Query("page") page: Int = 1,
-        @Query("pageSize") pageSize: Int = 20
+        @Query("pageSize") pageSize: Int = 24
     ): ApiResponse<PageData<Video>>
 
     /** 关注的 UP 主的视频 */
@@ -143,11 +166,16 @@ interface ApiService {
         @Query("pageSize") pageSize: Int = 20
     ): ApiResponse<PageData<Video>>
 
-    /** 收藏/取消收藏视频 */
-    @POST("/api/v1/favorite")
-    suspend fun toggleFavorite(
-        @Query("videoId") videoId: Long
-    ): ApiResponse<ActionResult>
+    /** 收藏视频：POST /videos/{id}/favorite body { folderId } */
+    @POST("/api/v1/videos/{id}/favorite")
+    suspend fun favoriteVideo(
+        @Path("id") videoId: Long,
+        @Body body: FavoriteRequest
+    ): ApiResponse<FavoriteResult>
+
+    /** 取消收藏：DELETE /favorites/items/{id}（{id} 为收藏记录 ID） */
+    @DELETE("/api/v1/favorites/items/{id}")
+    suspend fun unfavoriteVideo(@Path("id") id: Long): ApiResponse<ActionResult>
 
     /** 关注/取消关注 UP 主 */
     @POST("/api/v1/follow")
@@ -157,18 +185,21 @@ interface ApiService {
 
     // ==================== 用户资料 ====================
 
-    /** 当前用户完整资料 */
+    /** 当前用户完整资料：{ user, level } */
     @GET("/api/v1/users/me")
-    suspend fun getMyProfile(): ApiResponse<UserProfile>
+    suspend fun getMyProfile(): ApiResponse<MeResponse>
 
-    /** 更新昵称与签名 */
-    @POST("/api/v1/users/me")
+    /** 用户空间统计：{ user, level, videoCount, totalViews, joinedAt, isFollowing } */
+    @GET("/api/v1/users/{id}")
+    suspend fun getUserSpace(@Path("id") id: Long): ApiResponse<SpaceInfo>
+
+    /** 更新昵称与签名：PATCH /users/me body */
+    @HTTP(method = "PATCH", path = "/api/v1/users/me", hasBody = true)
     suspend fun updateMyProfile(
-        @Query("nickname") nickname: String? = null,
-        @Query("bio") bio: String? = null
-    ): ApiResponse<UserProfile>
+        @Body body: Map<String, String>
+    ): ApiResponse<MeResponse>
 
-    /** 每日签到 */
+    /** 每日签到：{ reward, streak } */
     @POST("/api/v1/users/me/checkin")
     suspend fun checkin(): ApiResponse<CheckinResult>
 
@@ -179,55 +210,62 @@ interface ApiService {
         @Query("newPassword") newPassword: String
     ): ApiResponse<ActionResult>
 
-    /** 消息会话列表 */
+    /** 消息会话列表：{ items:[{user,last,unread,updatedAt}], totalUnread } */
     @GET("/api/v1/messages/conversations")
-    suspend fun getConversations(): ApiResponse<PageData<Conversation>>
+    suspend fun getConversations(
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 20
+    ): ApiResponse<PageData<Conversation>>
 
     // ==================== 管理员 ====================
 
     @GET("/api/v1/admin/overview")
     suspend fun getAdminOverview(): ApiResponse<AdminOverview>
 
-    /** 稿件审核列表 */
-    @GET("/api/v1/admin/videos")
-    suspend fun getAdminVideos(
+    /** 稿件审核队列：GET /admin/queue（不是 /admin/videos） */
+    @GET("/api/v1/admin/queue")
+    suspend fun getAdminQueue(
         @Query("status") status: String? = null,
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 20
-    ): ApiResponse<PageData<AdminVideo>>
+    ): ApiResponse<AdminQueue>
 
-    /** 稿件审核（approve/reject） */
-    @POST("/api/v1/admin/videos/{id}/review")
+    /** 稿件审核：POST /videos/{id}/review body {approve,reason} */
+    @POST("/api/v1/videos/{id}/review")
     suspend fun reviewVideo(
         @Path("id") id: Long,
-        @Query("action") action: String,
-        @Query("reason") reason: String? = null
+        @Body body: ReviewRequest
     ): ApiResponse<ActionResult>
 
-    /** 稿件置顶/取消置顶 */
+    /** 稿件置顶/取消置顶：POST /admin/videos/{id}/pin body {pinned} */
     @POST("/api/v1/admin/videos/{id}/pin")
-    suspend fun pinVideo(@Path("id") id: Long): ApiResponse<ActionResult>
+    suspend fun pinVideo(
+        @Path("id") id: Long,
+        @Body body: PinRequest
+    ): ApiResponse<ActionResult>
 
     /** 评论列表 */
     @GET("/api/v1/admin/comments")
     suspend fun getAdminComments(
-        @Query("q") keyword: String? = null,
+        @Query("keyword") keyword: String? = null,
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 20
     ): ApiResponse<PageData<AdminComment>>
 
-    @POST("/api/v1/admin/comments/{id}/delete")
+    /** 删除评论：DELETE /admin/comments/{id} */
+    @DELETE("/api/v1/admin/comments/{id}")
     suspend fun deleteComment(@Path("id") id: Long): ApiResponse<ActionResult>
 
     /** 弹幕列表 */
     @GET("/api/v1/admin/danmaku")
     suspend fun getAdminDanmaku(
-        @Query("q") keyword: String? = null,
+        @Query("keyword") keyword: String? = null,
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 20
-    ): ApiResponse<PageData<AdminComment>>
+    ): ApiResponse<PageData<AdminDanmaku>>
 
-    @POST("/api/v1/admin/danmaku/{id}/delete")
+    /** 删除弹幕：DELETE /admin/danmaku/{id} */
+    @DELETE("/api/v1/admin/danmaku/{id}")
     suspend fun deleteDanmaku(@Path("id") id: Long): ApiResponse<ActionResult>
 
     /** 举报列表 */
@@ -238,29 +276,32 @@ interface ApiService {
         @Query("pageSize") pageSize: Int = 20
     ): ApiResponse<PageData<AdminReport>>
 
-    /** 处理举报（processed/ignored） */
+    /** 处理举报：POST /admin/reports/{id}/handle body {action}，action ∈ delete/ignore/ban */
     @POST("/api/v1/admin/reports/{id}/handle")
     suspend fun handleReport(
         @Path("id") id: Long,
-        @Query("action") action: String
+        @Body body: HandleReportRequest
     ): ApiResponse<ActionResult>
 
     /** 用户管理列表 */
     @GET("/api/v1/admin/users")
     suspend fun getAdminUsers(
-        @Query("q") keyword: String? = null,
+        @Query("keyword") keyword: String? = null,
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 20
     ): ApiResponse<PageData<AdminUser>>
 
-    /** 封禁/解封用户 */
+    /** 封禁/解封用户：POST /admin/users/{id}/ban body {banned} */
     @POST("/api/v1/admin/users/{id}/ban")
-    suspend fun banUser(@Path("id") id: Long): ApiResponse<ActionResult>
+    suspend fun banUser(
+        @Path("id") id: Long,
+        @Body body: BanRequest
+    ): ApiResponse<ActionResult>
 
-    /** 设为管理员/取消管理员 */
+    /** 设为管理员/取消管理员：POST /admin/users/{id}/role body {isAdmin} */
     @POST("/api/v1/admin/users/{id}/role")
     suspend fun setUserRole(
         @Path("id") id: Long,
-        @Query("role") role: String
+        @Body body: RoleRequest
     ): ApiResponse<ActionResult>
 }

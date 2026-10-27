@@ -49,6 +49,21 @@ data class NodeCurrent(
 )
 
 /**
+ * 节点授权请求体：POST /gateway/handoff { nodeId }
+ */
+data class HandoffRequest(
+    val nodeId: Long
+)
+
+/**
+ * 节点授权响应：{ nodeId, url }
+ */
+data class HandoffResult(
+    val nodeId: Long = 0,
+    val url: String = ""
+)
+
+/**
  * 流量配额
  */
 data class Quota(

@@ -8,6 +8,9 @@
         <item name="android:windowBackground">@color/bg_dark</item>
         <item name="android:statusBarColor">@color/bg_dark</item>
         <item name="android:navigationBarColor">@color/bg_dark</item>
+        <!-- Leanback 主题未定义 alertDialogTheme，缺省会让 AlertDialog.Builder 解析到 Resource ID #0x0 直接闪退。
+             所有页面的弹窗（关于本站、弹幕设置、清除缓存等）都依赖这里 -->
+        <item name="alertDialogTheme">@style/Theme.LingXiTV.Dialog</item>
     </style>
 
     <style name="Theme.LingXiTV.NoActionBar" parent="Theme.LingXiTV">
@@ -22,7 +25,8 @@
         <item name="alertDialogTheme">@style/Theme.LingXiTV.Dialog</item>
     </style>
 
-    <style name="Theme.LingXiTV.Dialog" parent="Theme.AppCompat.Light.Dialog.Alert">
+    <!-- 电视端弹窗使用深色底，与整体深色主题一致，避免大面积白色刺眼 -->
+    <style name="Theme.LingXiTV.Dialog" parent="Theme.AppCompat.Dialog.Alert">
         <item name="colorPrimary">@color/lingxi_green</item>
         <item name="colorPrimaryDark">@color/lingxi_green_dark</item>
         <item name="colorAccent">@color/lingxi_green_light</item>

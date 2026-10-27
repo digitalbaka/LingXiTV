@@ -68,13 +68,9 @@ data class Video(
     val isArticle: Boolean get() = kind == "article"
     val isVideo: Boolean get() = kind == "video"
 
-    fun getFullCoverUrl(baseUrl: String): String {
-        return if (cover.startsWith("http")) cover else baseUrl + cover
-    }
+    fun getFullCoverUrl(baseUrl: String): String = joinUrl(baseUrl, cover)
 
-    fun getFullSrcUrl(baseUrl: String): String {
-        return if (src.startsWith("http")) src else baseUrl + src
-    }
+    fun getFullSrcUrl(baseUrl: String): String = joinUrl(baseUrl, src)
 }
 
 /**
@@ -87,9 +83,7 @@ data class VideoQuality(
     val fps: Int = 0,
     val url: String = ""
 ) {
-    fun getFullUrl(baseUrl: String): String {
-        return if (url.startsWith("http")) url else baseUrl + url
-    }
+    fun getFullUrl(baseUrl: String): String = joinUrl(baseUrl, url)
 }
 
 /**
@@ -108,10 +102,16 @@ data class UserInfo(
     val vipTier: String = "",
     val vipTierLabel: String = ""
 ) {
-    fun getFullAvatarUrl(baseUrl: String): String {
-        return if (avatar.startsWith("http")) avatar else baseUrl + avatar
-    }
+    fun getFullAvatarUrl(baseUrl: String): String = joinUrl(baseUrl, avatar)
 }
+
+/**
+ * 用户展示名：昵称优先，其次用户名，都为空时用兜底文案
+ */
+fun UserInfo?.displayName(fallback: String = "匿名"): String =
+    this?.nickname?.takeIf { it.isNotBlank() }
+        ?: this?.username?.takeIf { it.isNotBlank() }
+        ?: fallback
 
 /**
  * 观看者信息
@@ -129,5 +129,10 @@ data class ViewerInfo(
 data class VideoDetail(
     val video: Video? = null,
     val following: Boolean = false,
-    val progress: Long? = null
+    /**
+     * 观看进度。未登录时为 null；已登录时服务端返回的是对象而不是数字，
+     * 若声明为 Long 会让整个详情响应解析失败（Expected a long but was BEGIN_OBJECT），
+     * 表现为任何视频都提示"加载失败"。这里用 Any 同时兼容数字与对象。
+     */
+    val progress: Any? = null
 )

@@ -9,5 +9,6 @@
     <color name="text_secondary">#B0B0B0</color>
     <color name="bg_dark">#121212</color>
     <color name="card_bg">#1E1E1E</color>
+    <color name="card_focus">#2B3F35</color>
     <color name="accent">#1a8a5c</color>
 </resources>

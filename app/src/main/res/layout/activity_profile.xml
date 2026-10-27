@@ -27,6 +27,8 @@
                     android:layout_width="72dp"
                     android:layout_height="72dp"
                     android:background="@color/card_bg"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/ic_avatar_placeholder"
                     android:contentDescription="头像" />
 
                 <LinearLayout
@@ -81,8 +83,11 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="每日签到"
-                android:backgroundTint="@color/lingxi_green"
+                android:background="@drawable/btn_primary"
                 android:textColor="@android:color/white"
+                android:minWidth="160dp"
+                android:focusable="true"
+                android:clickable="true"
                 android:layout_marginTop="12dp" />
         </LinearLayout>
 
@@ -94,8 +99,8 @@
             <TextView android:id="@+id/tvStatWorks" style="@style/StatItem" android:text="稿件\n-" />
             <TextView android:id="@+id/tvStatFav" style="@style/StatItem" android:text="收藏\n-" />
             <TextView android:id="@+id/tvStatHistory" style="@style/StatItem" android:text="历史\n-" />
-            <TextView android:id="@+id/tvStatDanmaku" style="@style/StatItem" android:text="弹幕\n-" />
-            <TextView android:id="@+id/tvStatComment" style="@style/StatItem" android:text="评论\n-" />
+            <TextView android:id="@+id/tvStatFans" style="@style/StatItem" android:text="粉丝\n-" />
+            <TextView android:id="@+id/tvStatFollow" style="@style/StatItem" android:text="关注\n-" />
         </LinearLayout>
 
         <!-- 菜单 -->

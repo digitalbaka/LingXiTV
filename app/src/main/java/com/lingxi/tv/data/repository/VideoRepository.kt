@@ -2,9 +2,11 @@ package com.lingxi.tv.data.repository
 
 import com.google.gson.reflect.TypeToken
 import com.lingxi.tv.data.api.ApiClient
+import com.lingxi.tv.data.auth.AuthManager
 import com.lingxi.tv.data.model.ActionResult
 import com.lingxi.tv.data.model.ApiResponse
 import com.lingxi.tv.data.model.AdminComment
+import com.lingxi.tv.data.model.AdminDanmaku
 import com.lingxi.tv.data.model.AdminOverview
 import com.lingxi.tv.data.model.AdminReport
 import com.lingxi.tv.data.model.AdminUser
@@ -13,17 +15,28 @@ import com.lingxi.tv.data.model.Captcha
 import com.lingxi.tv.data.model.CheckinResult
 import com.lingxi.tv.data.model.Conversation
 import com.lingxi.tv.data.model.LoginRequest
+import com.lingxi.tv.data.model.MeLevel
+import com.lingxi.tv.data.model.MeUser
 import com.lingxi.tv.data.model.SendCodeRequest
 import com.lingxi.tv.data.model.UserProfile
 import com.lingxi.tv.data.model.Verify2faRequest
 import com.lingxi.tv.data.model.DanmakuList
+import com.lingxi.tv.data.model.FavoriteRequest
+import com.lingxi.tv.data.model.FavoriteResult
 import com.lingxi.tv.data.model.GatewayInfo
+import com.lingxi.tv.data.model.HandleReportRequest
+import com.lingxi.tv.data.model.HandoffRequest
+import com.lingxi.tv.data.model.HandoffResult
 import com.lingxi.tv.data.model.LoginResult
 import com.lingxi.tv.data.model.PageData
 import com.lingxi.tv.data.model.Partition
+import com.lingxi.tv.data.model.PinRequest
+import com.lingxi.tv.data.model.ReviewRequest
+import com.lingxi.tv.data.model.RoleRequest
 import com.lingxi.tv.data.model.SearchResult
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoDetail
+import com.lingxi.tv.data.model.BanRequest
 import retrofit2.HttpException
 
 /**
@@ -252,6 +265,18 @@ class VideoRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
+    /**
+     * 节点授权。必须调用后才能从该节点拉流，否则节点返回 40301 JSON，
+     * 播放器会一直缓冲无法播放。nodeId = 0 表示回主站。
+     */
+    suspend fun handoff(nodeId: Long): Result<HandoffResult> {
+        return try {
+            val resp = api.handoff(HandoffRequest(nodeId))
+            if (resp.isSuccess) Result.success(resp.data ?: HandoffResult(nodeId))
+            else Result.failure(Exception(resp.message.ifEmpty { "节点授权失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
     // ==================== 用户内容 ====================
 
     suspend fun getHistory(page: Int = 1, pageSize: Int = 20): Result<PageData<Video>> {
@@ -262,9 +287,22 @@ class VideoRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
+    /**
+     * 获取收藏视频。
+     * 服务端没有 /favorites 列表接口：先取当前用户的收藏夹，
+     * 优先默认收藏夹，再取该收藏夹内的视频。
+     */
     suspend fun getFavorites(page: Int = 1, pageSize: Int = 20): Result<PageData<Video>> {
         return try {
-            val resp = api.getFavorites(page, pageSize)
+            val uid = AuthManager.user?.id
+            if (uid == null || uid <= 0) {
+                return Result.failure(Exception("请先登录"))
+            }
+            val foldersResp = api.getFavoriteFolders(uid)
+            val folders = foldersResp.data?.items.orEmpty()
+            val folder = folders.firstOrNull { it.isDefault } ?: folders.firstOrNull()
+                ?: return Result.success(PageData(emptyList(), 0, page, pageSize, false))
+            val resp = api.getFavoriteFolderItems(folder.id, page, pageSize)
             if (resp.isSuccess && resp.data != null) Result.success(resp.data)
             else Result.failure(Exception(resp.message.ifEmpty { "获取收藏失败" }))
         } catch (e: Exception) { Result.failure(e) }
@@ -278,11 +316,25 @@ class VideoRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun toggleFavorite(videoId: Long): Result<ActionResult> {
+    /** 收藏到默认收藏夹 */
+    suspend fun favoriteVideo(videoId: Long): Result<FavoriteResult> {
         return try {
-            val resp = api.toggleFavorite(videoId)
+            val uid = AuthManager.user?.id ?: return Result.failure(Exception("请先登录"))
+            val folders = api.getFavoriteFolders(uid).data?.items.orEmpty()
+            val folder = folders.firstOrNull { it.isDefault } ?: folders.firstOrNull()
+                ?: return Result.failure(Exception("没有可用的收藏夹"))
+            val resp = api.favoriteVideo(videoId, FavoriteRequest(folder.id))
+            if (resp.isSuccess) Result.success(resp.data ?: FavoriteResult(true))
+            else Result.failure(Exception(resp.message.ifEmpty { "收藏失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 取消收藏（id 为收藏记录 ID） */
+    suspend fun unfavoriteVideo(favoriteItemId: Long): Result<ActionResult> {
+        return try {
+            val resp = api.unfavoriteVideo(favoriteItemId)
             if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
-            else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
+            else Result.failure(Exception(resp.message.ifEmpty { "取消收藏失败" }))
         } catch (e: Exception) { Result.failure(e) }
     }
 
@@ -296,20 +348,79 @@ class VideoRepository {
 
     // ==================== 用户资料 ====================
 
+    /**
+     * 当前用户资料：/users/me 只返回 {user,level}，
+     * 稿件数/收藏数/历史数分别从 /users/{id}、收藏夹、历史列表补齐。
+     */
     suspend fun getMyProfile(): Result<UserProfile> {
         return try {
             val resp = api.getMyProfile()
-            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
-            else Result.failure(Exception(resp.message.ifEmpty { "获取资料失败" }))
+            val me = resp.data
+            val u = me?.user
+            if (!resp.isSuccess || me == null || u == null) {
+                return Result.failure(Exception(resp.message.ifEmpty { "获取资料失败" }))
+            }
+            var videoCount = 0
+            var favoriteCount = 0
+            var historyCount = 0
+            try {
+                videoCount = api.getUserSpace(u.id).data?.videoCount ?: 0
+            } catch (_: Exception) {
+            }
+            try {
+                favoriteCount = api.getFavoriteFolders(u.id).data?.items?.sumOf { it.count } ?: 0
+            } catch (_: Exception) {
+            }
+            try {
+                historyCount = api.getHistory(1, 1).data?.total ?: 0
+            } catch (_: Exception) {
+            }
+            Result.success(u.toProfile(me.level, videoCount, favoriteCount, historyCount))
         } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun updateMyProfile(nickname: String?, bio: String?): Result<UserProfile> {
         return try {
-            val resp = api.updateMyProfile(nickname, bio)
-            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
-            else Result.failure(Exception(resp.message.ifEmpty { "更新失败" }))
+            val body = mutableMapOf<String, String>()
+            nickname?.let { body["nickname"] = it }
+            bio?.let { body["bio"] = it }
+            if (body.isEmpty()) return Result.failure(Exception("没有需要保存的内容"))
+            val resp = api.updateMyProfile(body)
+            val me = resp.data
+            val u = me?.user
+            if (resp.isSuccess && me != null && u != null) {
+                Result.success(u.toProfile(me.level, 0, 0, 0))
+            } else {
+                Result.failure(Exception(resp.message.ifEmpty { "更新失败" }))
+            }
         } catch (e: Exception) { Result.failure(e) }
+    }
+
+    private fun MeUser.toProfile(
+        level: MeLevel?,
+        videoCount: Int,
+        favoriteCount: Int,
+        historyCount: Int
+    ): UserProfile {
+        return UserProfile(
+            id = id,
+            username = username,
+            nickname = nickname,
+            avatar = avatar,
+            bio = bio,
+            level = level?.level ?: this.level,
+            exp = level?.current ?: exp,
+            nextLevelExp = level?.next ?: 0,
+            expPercent = level?.percent ?: 0,
+            followerCount = followerCount,
+            followingCount = followingCount,
+            videoCount = videoCount,
+            favoriteCount = favoriteCount,
+            historyCount = historyCount,
+            checkedIn = checkedInToday,
+            badgeLabel = badgeLabel,
+            isAdmin = isAdmin
+        )
     }
 
     suspend fun checkin(): Result<CheckinResult> {
@@ -317,6 +428,8 @@ class VideoRepository {
             val resp = api.checkin()
             if (resp.isSuccess) Result.success(resp.data ?: CheckinResult(success = true))
             else Result.failure(Exception(resp.message.ifEmpty { "签到失败" }))
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseErrorBody<ActionResult>(e)?.message ?: "签到失败（HTTP ${e.code()}）"))
         } catch (e: Exception) { Result.failure(e) }
     }
 
@@ -328,9 +441,9 @@ class VideoRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun getConversations(): Result<PageData<Conversation>> {
+    suspend fun getConversations(page: Int = 1, pageSize: Int = 20): Result<PageData<Conversation>> {
         return try {
-            val resp = api.getConversations()
+            val resp = api.getConversations(page, pageSize)
             if (resp.isSuccess && resp.data != null) Result.success(resp.data)
             else Result.failure(Exception(resp.message.ifEmpty { "获取消息失败" }))
         } catch (e: Exception) { Result.failure(e) }
@@ -346,25 +459,36 @@ class VideoRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
+    /** 审核队列，转换为分页结构供列表使用 */
     suspend fun getAdminVideos(status: String? = null, page: Int = 1): Result<PageData<AdminVideo>> {
         return try {
-            val resp = api.getAdminVideos(status, page)
-            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
-            else Result.failure(Exception(resp.message.ifEmpty { "获取稿件失败" }))
+            val resp = api.getAdminQueue(status, page)
+            if (resp.isSuccess && resp.data != null) {
+                val q = resp.data
+                Result.success(
+                    PageData(
+                        items = q.items,
+                        total = q.total,
+                        page = q.page,
+                        pageSize = 20,
+                        hasMore = q.hasMore
+                    )
+                )
+            } else Result.failure(Exception(resp.message.ifEmpty { "获取稿件失败" }))
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun reviewVideo(id: Long, action: String, reason: String? = null): Result<ActionResult> {
+    suspend fun reviewVideo(id: Long, approve: Boolean, reason: String? = null): Result<ActionResult> {
         return try {
-            val resp = api.reviewVideo(id, action, reason)
+            val resp = api.reviewVideo(id, ReviewRequest(approve, reason))
             if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
             else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun pinVideo(id: Long): Result<ActionResult> {
+    suspend fun pinVideo(id: Long, pinned: Boolean): Result<ActionResult> {
         return try {
-            val resp = api.pinVideo(id)
+            val resp = api.pinVideo(id, PinRequest(pinned))
             if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
             else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
         } catch (e: Exception) { Result.failure(e) }
@@ -386,7 +510,7 @@ class VideoRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun getAdminDanmaku(keyword: String? = null, page: Int = 1): Result<PageData<AdminComment>> {
+    suspend fun getAdminDanmaku(keyword: String? = null, page: Int = 1): Result<PageData<AdminDanmaku>> {
         return try {
             val resp = api.getAdminDanmaku(keyword, page)
             if (resp.isSuccess && resp.data != null) Result.success(resp.data)
@@ -412,7 +536,7 @@ class VideoRepository {
 
     suspend fun handleReport(id: Long, action: String): Result<ActionResult> {
         return try {
-            val resp = api.handleReport(id, action)
+            val resp = api.handleReport(id, HandleReportRequest(action))
             if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
             else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
         } catch (e: Exception) { Result.failure(e) }
@@ -426,17 +550,17 @@ class VideoRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun banUser(id: Long): Result<ActionResult> {
+    suspend fun banUser(id: Long, banned: Boolean): Result<ActionResult> {
         return try {
-            val resp = api.banUser(id)
+            val resp = api.banUser(id, BanRequest(banned))
             if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
             else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun setUserRole(id: Long, role: String): Result<ActionResult> {
+    suspend fun setUserRole(id: Long, isAdmin: Boolean): Result<ActionResult> {
         return try {
-            val resp = api.setUserRole(id, role)
+            val resp = api.setUserRole(id, RoleRequest(isAdmin))
             if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
             else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
         } catch (e: Exception) { Result.failure(e) }

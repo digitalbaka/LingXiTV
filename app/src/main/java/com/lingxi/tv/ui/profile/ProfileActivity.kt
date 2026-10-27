@@ -83,6 +83,9 @@ class ProfileActivity : AppCompatActivity() {
         }
         findViewById<TextView>(R.id.menuAbout).setOnClickListener { showAbout() }
 
+        // 电视端遥控器：给一个明确的初始焦点，避免进入页面后按键无处可去
+        btnCheckin.post { btnCheckin.requestFocus() }
+
         loadProfile()
     }
 
@@ -113,19 +116,27 @@ class ProfileActivity : AppCompatActivity() {
     private fun bindProfile(p: UserProfile) {
         tvNickname.text = p.nickname.ifEmpty { p.username }
         tvMeta.text = "UID ${p.id} · LV${p.level} · ${p.followerCount} 粉丝 · ${p.followingCount} 关注" +
-            if (p.verified && p.verifyName.isNotEmpty()) " · ✓${p.verifyName}" else ""
+            if (p.badgeLabel.isNotEmpty()) " · ${p.badgeLabel}" else ""
         tvExp.text = if (p.nextLevelExp > 0) "LV${p.level} · ${p.exp}/${p.nextLevelExp} 经验" else "LV${p.level} · ${p.exp} 经验"
         tvBio.text = p.bio
         tvBio.visibility = if (p.bio.isEmpty()) View.GONE else View.VISIBLE
 
-        Glide.with(this).load(p.getFullAvatarUrl(ApiClient.BASE_URL))
-            .circleCrop().into(ivAvatar)
+        // 头像为空时显示占位图，避免一片空白
+        val avatarUrl = p.getFullAvatarUrl(ApiClient.BASE_URL)
+        if (avatarUrl.isEmpty()) {
+            ivAvatar.setImageResource(R.drawable.ic_avatar_placeholder)
+        } else {
+            Glide.with(this).load(avatarUrl)
+                .placeholder(R.drawable.ic_avatar_placeholder)
+                .error(R.drawable.ic_avatar_placeholder)
+                .circleCrop().into(ivAvatar)
+        }
 
         findViewById<TextView>(R.id.tvStatWorks).text = "稿件\n${p.videoCount}"
         findViewById<TextView>(R.id.tvStatFav).text = "收藏\n${p.favoriteCount}"
         findViewById<TextView>(R.id.tvStatHistory).text = "历史\n${p.historyCount}"
-        findViewById<TextView>(R.id.tvStatDanmaku).text = "弹幕\n${p.danmakuCount}"
-        findViewById<TextView>(R.id.tvStatComment).text = "评论\n${p.commentCount}"
+        findViewById<TextView>(R.id.tvStatFans).text = "粉丝\n${p.followerCount}"
+        findViewById<TextView>(R.id.tvStatFollow).text = "关注\n${p.followingCount}"
 
         btnCheckin.text = if (p.checkedIn) "已签到" else "每日签到"
         btnCheckin.isEnabled = !p.checkedIn
@@ -136,9 +147,13 @@ class ProfileActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repository.checkin().onSuccess { r ->
                 btnCheckin.text = "已签到"
-                Toast.makeText(this@ProfileActivity,
-                    if (r.exp > 0) "签到成功，经验 +${r.exp}" else "签到成功",
-                    Toast.LENGTH_SHORT).show()
+                val msg = when {
+                    r.reward > 0 && r.streak > 0 -> "签到成功，经验 +${r.reward}，连续 ${r.streak} 天"
+                    r.reward > 0 -> "签到成功，经验 +${r.reward}"
+                    r.streak > 0 -> "签到成功，连续 ${r.streak} 天"
+                    else -> "签到成功"
+                }
+                Toast.makeText(this@ProfileActivity, msg, Toast.LENGTH_SHORT).show()
                 loadProfile()
             }.onFailure {
                 btnCheckin.isEnabled = true

@@ -67,9 +67,7 @@ data class User(
     val followingCount: Int = 0,
     val vip: Boolean = false
 ) {
-    fun getFullAvatarUrl(baseUrl: String): String {
-        return if (avatar.startsWith("http")) avatar else baseUrl + avatar
-    }
+    fun getFullAvatarUrl(baseUrl: String): String = joinUrl(baseUrl, avatar)
 }
 
 /**

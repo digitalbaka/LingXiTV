@@ -86,6 +86,14 @@ class VideoListActivity : FragmentActivity() {
             return
         }
 
+        // 关注动态：直接全屏播放，按向下键连续浏览下一条
+        if (type == TYPE_FOLLOWING) {
+            startActivity(Intent(this, PlayerActivity::class.java)
+                .putExtra(PlayerActivity.EXTRA_FEED_MODE, true))
+            finish()
+            return
+        }
+
         lifecycleScope.launch {
             val result: Result<PageData<Video>> = when (type) {
                 TYPE_HISTORY -> repository.getHistory()

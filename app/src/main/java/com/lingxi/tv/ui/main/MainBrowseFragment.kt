@@ -67,11 +67,18 @@ class MainBrowseFragment : BrowseSupportFragment() {
     }
 
     private fun setupEventListeners() {
-        onItemViewClickedListener = OnItemViewClickedListener { _, item, _, _ ->
+        onItemViewClickedListener = OnItemViewClickedListener { _, item, _, row ->
             when (item) {
                 is Video -> {
-                    val intent = Intent(requireContext(), PlayerActivity::class.java).apply {
-                        putExtra(PlayerActivity.EXTRA_VIDEO_ID, item.id)
+                    val intent = Intent(requireContext(), PlayerActivity::class.java)
+                    // 关注动态：全屏播放并按向下键连续切换下一条
+                    if (row?.headerItem?.id == HEADER_FOLLOWING) {
+                        val inner = findListRowByHeaderId(HEADER_FOLLOWING)?.adapter as? ArrayObjectAdapter
+                        val index = inner?.indexOf(item) ?: 0
+                        intent.putExtra(PlayerActivity.EXTRA_FEED_MODE, true)
+                            .putExtra(PlayerActivity.EXTRA_START_INDEX, index)
+                    } else {
+                        intent.putExtra(PlayerActivity.EXTRA_VIDEO_ID, item.id)
                     }
                     startActivity(intent)
                 }

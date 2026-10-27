@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
 import com.lingxi.tv.data.model.Conversation
+import com.lingxi.tv.data.model.displayName
 import kotlinx.coroutines.launch
 
 /**
@@ -42,7 +43,14 @@ class MessageActivity : AppCompatActivity() {
             repository.getConversations().onSuccess { page ->
                 adapter.setData(page.items)
                 tvEmpty.visibility = if (page.items.isEmpty()) View.VISIBLE else View.GONE
+                // 遥控器：焦点落到第一条会话
+                if (page.items.isNotEmpty()) {
+                    rv.post {
+                        rv.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
+                    }
+                }
             }.onFailure {
+                tvEmpty.visibility = View.VISIBLE
                 Toast.makeText(this@MessageActivity, "加载失败：${it.message}", Toast.LENGTH_SHORT).show()
             }
         }
@@ -74,9 +82,10 @@ class MessageActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             val c = items[position]
-            val name = c.nickname.ifEmpty { c.username }
+            val name = c.user.displayName("未知用户")
             holder.tvTitle.text = if (c.unread > 0) "$name（${c.unread} 条未读）" else name
-            holder.tvSub.text = c.lastMessage
+            val last = c.last?.content.orEmpty()
+            holder.tvSub.text = if (c.last?.mine == true) "我：$last" else last
         }
 
         override fun getItemCount(): Int = items.size

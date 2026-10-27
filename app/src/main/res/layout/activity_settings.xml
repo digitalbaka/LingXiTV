@@ -38,6 +38,8 @@
                     android:layout_width="64dp"
                     android:layout_height="64dp"
                     android:background="@color/card_bg"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/ic_avatar_placeholder"
                     android:contentDescription="头像" />
 
                 <LinearLayout

@@ -75,6 +75,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="重置为默认服务器"
+        android:textColor="@color/text_primary"
+        android:background="@drawable/btn_secondary"
+        android:focusable="true"
+        android:clickable="true"
         android:layout_marginTop="12dp" />
 
 </LinearLayout>

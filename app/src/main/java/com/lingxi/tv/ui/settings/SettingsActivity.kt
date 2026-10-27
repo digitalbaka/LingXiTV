@@ -60,8 +60,14 @@ class SettingsActivity : AppCompatActivity() {
         }
         tvClearCache.setOnClickListener { showClearCacheDialog() }
         tvDanmakuSettings.setOnClickListener { showDanmakuSettingsDialog() }
+        findViewById<TextView>(R.id.tvTheme).setOnClickListener { showThemeDialog() }
         findViewById<TextView>(R.id.tvChangePassword).setOnClickListener { showChangePasswordDialog() }
         findViewById<TextView>(R.id.tvLogout).setOnClickListener { confirmLogout() }
+
+        // 电视端遥控器初始焦点
+        findViewById<TextView>(R.id.tvEditProfile).post {
+            findViewById<TextView>(R.id.tvEditProfile).requestFocus()
+        }
 
         tvVersion.text = try {
             val info = packageManager.getPackageInfo(packageName, 0)
@@ -90,7 +96,11 @@ class SettingsActivity : AppCompatActivity() {
         AuthManager.user?.let {
             tvNickname.text = it.nickname.ifEmpty { it.username }
             tvUidLevel.text = "UID ${it.id} · LV${it.level}"
-            Glide.with(this).load(it.getFullAvatarUrl(ApiClient.BASE_URL))
+            val url = it.getFullAvatarUrl(ApiClient.BASE_URL)
+            if (url.isEmpty()) ivAvatar.setImageResource(R.drawable.ic_avatar_placeholder)
+            else Glide.with(this).load(url)
+                .placeholder(R.drawable.ic_avatar_placeholder)
+                .error(R.drawable.ic_avatar_placeholder)
                 .circleCrop().into(ivAvatar)
         }
         lifecycleScope.launch {
@@ -98,9 +108,16 @@ class SettingsActivity : AppCompatActivity() {
                 profile = p
                 tvNickname.text = p.nickname.ifEmpty { p.username }
                 tvUidLevel.text = "UID ${p.id} · LV${p.level}"
-                Glide.with(this@SettingsActivity)
-                    .load(p.getFullAvatarUrl(ApiClient.BASE_URL))
-                    .circleCrop().into(ivAvatar)
+                val url = p.getFullAvatarUrl(ApiClient.BASE_URL)
+                if (url.isEmpty()) {
+                    ivAvatar.setImageResource(R.drawable.ic_avatar_placeholder)
+                } else {
+                    Glide.with(this@SettingsActivity)
+                        .load(url)
+                        .placeholder(R.drawable.ic_avatar_placeholder)
+                        .error(R.drawable.ic_avatar_placeholder)
+                        .circleCrop().into(ivAvatar)
+                }
             }
         }
     }
@@ -274,6 +291,17 @@ class SettingsActivity : AppCompatActivity() {
                 Toast.makeText(this, "屏蔽词已保存", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("取消", null)
+            .show()
+    }
+
+    // ==================== 主题外观 ====================
+
+    private fun showThemeDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("主题外观")
+            .setMessage("TV 版固定使用深色主题，与网页端同源同风格。\n\n" +
+                "浅色主题在电视大屏上对比度较低，且遥控器焦点不易识别，因此不提供切换。")
+            .setPositiveButton("知道了", null)
             .show()
     }
 

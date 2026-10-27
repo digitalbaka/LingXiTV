@@ -64,6 +64,11 @@ class NodeSelectActivity : AppCompatActivity() {
             result.onSuccess { info ->
                 nodes = info.nodes.filter { it.enabled }
                 adapter.setData(nodes, AuthManager.nodeId)
+                // 遥控器：焦点落到第一个节点
+                rvNodes.post {
+                    rvNodes.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
+                        ?: rvNodes.requestFocus()
+                }
 
                 info.quota?.let { q ->
                     val usedMb = q.used / (1024 * 1024)
@@ -76,13 +81,27 @@ class NodeSelectActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 切换节点前必须先调用 /gateway/handoff 把当前 IP 授权到目标节点，
+     * 否则节点会返回 40301 JSON，播放器一直缓冲无法播放。
+     */
     private fun selectNode(node: GatewayNode) {
-        AuthManager.nodeId = node.id
-        AuthManager.nodeUrl = node.url
-        AuthManager.nodeName = node.name
-        Toast.makeText(this, "已切换到：${node.name}", Toast.LENGTH_SHORT).show()
-        updateCurrentInfo()
-        adapter.setData(nodes, node.id)
+        lifecycleScope.launch {
+            repository.handoff(node.id).onSuccess { r ->
+                // 优先使用节点列表里的根地址，避免 handoff 返回的跳转地址带参数
+                val url = node.url.ifEmpty { r.url }
+                AuthManager.nodeId = node.id
+                // 地址为空时按主站处理，防止拼出非法播放地址
+                AuthManager.nodeUrl = url.ifEmpty { null }
+                AuthManager.nodeName = node.name
+                Toast.makeText(this@NodeSelectActivity, "已切换到：${node.name}", Toast.LENGTH_SHORT).show()
+                updateCurrentInfo()
+                adapter.setData(nodes, node.id)
+            }.onFailure {
+                Toast.makeText(this@NodeSelectActivity,
+                    "切换失败：${it.message}", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun resetToDefault() {
@@ -92,6 +111,8 @@ class NodeSelectActivity : AppCompatActivity() {
         Toast.makeText(this, "已重置为主站", Toast.LENGTH_SHORT).show()
         updateCurrentInfo()
         adapter.setData(nodes, 0)
+        // 通知服务端回主站（失败不影响本地已重置）
+        lifecycleScope.launch { repository.handoff(0) }
     }
 
     override fun onDestroy() {

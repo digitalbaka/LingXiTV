@@ -57,15 +57,20 @@
             android:hint="输入关键词检索"
             android:textColor="@color/text_primary"
             android:textColorHint="@color/text_secondary"
-            android:background="@android:color/white"
+            android:background="@drawable/bg_edit_text"
             android:padding="10dp"
-            android:singleLine="true" />
+            android:singleLine="true"
+            android:focusable="true" />
 
         <Button
             android:id="@+id/btnSearch"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="搜索"
+            android:textColor="@color/text_primary"
+            android:background="@drawable/btn_secondary"
+            android:focusable="true"
+            android:clickable="true"
             android:layout_marginStart="8dp" />
     </LinearLayout>
 
