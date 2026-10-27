@@ -194,23 +194,38 @@ class LoginActivity : AppCompatActivity() {
             showStatus("请先输入图形验证码")
             return
         }
+        // 图形验证码已被消耗（null）或加载过久（id 为空），必须先刷新
+        val captchaId = captcha?.id
+        if (captchaId.isNullOrEmpty()) {
+            showStatus("图形验证码已过期，请稍候…")
+            loadCaptcha()
+            return
+        }
         btnSendCode.isEnabled = false
+        btnSendCode.text = "发送中…"
         showStatus("验证码发送中…")
         lifecycleScope.launch {
-            repository.sendEmailCode(ticket, captcha?.id ?: "", captchaCode)
+            repository.sendEmailCode(ticket, captchaId, captchaCode)
                 .onSuccess {
                     showStatus("验证码已发送到绑定邮箱，请查收")
+                    Toast.makeText(this@LoginActivity, "验证码已发送，请查收邮件", Toast.LENGTH_SHORT).show()
                     startCountdown()
                 }
                 .onFailure { e ->
                     btnSendCode.isEnabled = true
+                    btnSendCode.text = "发送验证码"
                     val msg = e.message ?: "发送失败"
                     showStatus("发送失败：$msg")
-                    // 只有图形验证码确实被服务端判定错误/过期时才刷新
-                    // 网络错误 / 502 / 票据无效 等不应该刷新，让用户重试即可
-                    if (msg.contains("图形验证码") || msg.contains("验证码不正确") ||
-                        msg.contains("验证码已过期") || msg.contains("captcha")) {
+                    Toast.makeText(this@LoginActivity, "发送失败：$msg", Toast.LENGTH_LONG).show()
+                    // 判断失败原因：
+                    // - 图形验证码相关错误（400 + captcha 关键字）→ 刷新图形验证码，清空用户输入
+                    // - 服务器 5xx / 网络错误 → 不刷新，保持用户输入让其重试
+                    // - 票据无效 / 其他 → 不刷新
+                    val isCaptchaError = msg.contains("图形验证码") || msg.contains("captcha", ignoreCase = true) ||
+                        msg.contains("验证码不正确") || msg.contains("验证码已过期")
+                    if (isCaptchaError) {
                         loadCaptcha()
+                        etCaptchaCode.setText("")
                     }
                 }
         }
@@ -258,7 +273,7 @@ class LoginActivity : AppCompatActivity() {
 
     /** 保存登录状态（持久化 token，下次免登录）并进入主界面 */
     private fun finishLogin(result: LoginResult) {
-        val token = result.token
+        val token = result.accessToken
         val user = result.user
         if (token.isNullOrEmpty() || user == null) {
             showStatus("登录响应异常，请重试")

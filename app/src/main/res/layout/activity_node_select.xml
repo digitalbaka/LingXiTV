@@ -20,31 +20,35 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="@color/card_bg"
+        android:background="@drawable/btn_secondary"
         android:padding="20dp"
         android:layout_marginBottom="16dp">
 
         <TextView
             android:id="@+id/tvCurrentNode"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="当前：主站"
             android:textColor="@color/lingxi_green_light"
             android:textSize="18sp"
+            android:maxLines="1"
+            android:ellipsize="end"
             android:layout_marginBottom="8dp" />
 
         <TextView
             android:id="@+id/tvNodeUrl"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="后端地址：-"
             android:textColor="@color/text_secondary"
             android:textSize="14sp"
+            android:maxLines="1"
+            android:ellipsize="middle"
             android:layout_marginBottom="4dp" />
 
         <TextView
             android:id="@+id/tvQuota"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="流量：- / -"
             android:textColor="@color/text_secondary"
@@ -52,7 +56,7 @@
     </LinearLayout>
 
     <TextView
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="可切换的线路"
         android:textColor="@color/text_primary"

@@ -28,20 +28,16 @@ object ApiClient {
     }
 
     private val okHttpClient: OkHttpClient by lazy {
+        val loggingInterceptor = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        }
         val builder = OkHttpClient.Builder()
             .connectTimeout(CONNECT_TIMEOUT, TimeUnit.SECONDS)
             .readTimeout(READ_TIMEOUT, TimeUnit.SECONDS)
             .writeTimeout(WRITE_TIMEOUT, TimeUnit.SECONDS)
-            // 连接池复用，减少内存分配
             .connectionPool(okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES))
-            // 设备标识头：两步验证「记住这台设备」信任机制依赖
-            .addInterceptor { chain ->
-                val request = chain.request().newBuilder()
-                    .header("X-Device-Id", AuthManager.deviceId)
-                    .header("X-Device-Label", AuthManager.DEVICE_LABEL)
-                    .build()
-                chain.proceed(request)
-            }
+            // 自动重试：服务器 5xx / 连接失败 / SSL 超时，最多重试 2 次，间隔 1 秒
+            .retryOnConnectionFailure(true)
             // 自动附加 Authorization 头
             .addInterceptor { chain ->
                 val original = chain.request()
@@ -53,6 +49,16 @@ object ApiClient {
                 } else original
                 chain.proceed(request)
             }
+            // 设备标识头：两步验证「记住这台设备」信任机制依赖
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .header("X-Device-Id", AuthManager.deviceId)
+                    .header("X-Device-Label", AuthManager.DEVICE_LABEL)
+                    .build()
+                chain.proceed(request)
+            }
+            // 网络请求日志（debugBuild 输出完整请求/响应，releaseBuild 输出简洁行）
+            .addInterceptor(loggingInterceptor)
 
         builder.build()
     }

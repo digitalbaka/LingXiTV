@@ -18,11 +18,13 @@ data class LoginRequest(
 
 /**
  * 登录响应
- * 直接登录成功：token + user
- * 站点强制两步验证：HTTP 400，data 中返回 mfaRequired=true、mfaTicket、emailMasked
+ * 直接登录成功：accessToken + refreshToken + user
+ * 站点强制两步验证：data 中返回 mfaRequired=true、mfaTicket、emailMasked
  */
 data class LoginResult(
-    val token: String? = null,
+    val accessToken: String? = null,
+    val refreshToken: String? = null,
+    val deviceToken: String? = null,
     val user: User? = null,
     val mfaRequired: Boolean = false,
     val mfaTicket: String? = null,
@@ -30,20 +32,24 @@ data class LoginResult(
 )
 
 /**
- * 发送邮箱验证码请求体（发送到账号绑定邮箱）
+ * 发送邮箱验证码请求体
+ * 站点接口要求：purpose 区分用途（login 走登录二次验证，此时必须带 ticket 而不是邮箱），
+ * ticket 为账号密码登录返回的 mfaTicket
  */
 data class SendCodeRequest(
-    val mfaTicket: String? = null,
+    val purpose: String,
+    val ticket: String,
     val captchaId: String,
     val captchaCode: String
 )
 
 /**
- * 两步验证请求体
+ * 两步验证请求体（站点字段名为 ticket，不是 mfaTicket）
  */
 data class Verify2faRequest(
-    val mfaTicket: String,
+    val ticket: String,
     val code: String,
+    val useRecovery: Boolean = false,
     val rememberDevice: Boolean
 )
 

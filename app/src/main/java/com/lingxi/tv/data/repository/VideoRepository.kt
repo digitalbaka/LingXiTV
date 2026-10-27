@@ -154,34 +154,66 @@ class VideoRepository {
             if (resp.data != null) Result.success(resp.data)
             else Result.failure(Exception(resp.message.ifEmpty { "登录失败" }))
         } catch (e: HttpException) {
-            // HTTP 400 等错误：解析错误体，检测两步验证要求
-            val data = parseErrorBody<LoginResult>(e)?.data
-            if (data?.mfaRequired == true) {
-                Result.success(data)
+            val code = e.code()
+            val data = parseErrorBody<LoginResult>(e)
+            // HTTP 400 + mfaRequired → 两步验证（作为成功结果）
+            if (data?.data?.mfaRequired == true) {
+                Result.success(data.data)
+            } else if (code in 500..599) {
+                Result.failure(Exception("服务器暂时不可用（HTTP $code），请稍后重试"))
+            } else if (code == 400 && data?.message != null) {
+                Result.failure(Exception(data.message))
+            } else if (code == 401) {
+                Result.failure(Exception("登录已过期，请重新登录"))
             } else {
-                Result.failure(Exception(parseErrorBody<LoginResult>(e)?.message?.ifEmpty { null } ?: "登录失败（HTTP ${e.code()}）"))
+                Result.failure(Exception(data?.message?.ifEmpty { null } ?: "登录失败（HTTP $code）"))
             }
+        } catch (e: java.net.SocketTimeoutException) {
+            Result.failure(Exception("网络超时，请检查网络后重试"))
+        } catch (e: java.net.UnknownHostException) {
+            Result.failure(Exception("网络连接失败，请检查网络"))
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception("登录失败：${e.message}"))
         }
     }
 
-    /** 发送邮箱验证码到绑定邮箱 */
+    /** 发送邮箱验证码到绑定邮箱（登录二次验证：purpose=login + ticket） */
     suspend fun sendEmailCode(mfaTicket: String?, captchaId: String, captchaCode: String): Result<ActionResult> {
         return try {
-            val resp = api.sendEmailCode(SendCodeRequest(mfaTicket, captchaId, captchaCode))
+            val resp = api.sendEmailCode(
+                SendCodeRequest(
+                    purpose = "login",
+                    ticket = mfaTicket.orEmpty(),
+                    captchaId = captchaId,
+                    captchaCode = captchaCode
+                )
+            )
             Result.success(resp.data ?: ActionResult(true, resp.message.ifEmpty { "已发送" }))
         } catch (e: HttpException) {
-            Result.failure(Exception(parseErrorBody<ActionResult>(e)?.message ?: "发送失败（HTTP ${e.code()}）"))
+            val code = e.code()
+            val msg = parseErrorBody<ActionResult>(e)?.message
+            if (code in 500..599) Result.failure(Exception("服务器暂时不可用（HTTP $code），请稍后重试"))
+            else Result.failure(Exception(msg?.ifEmpty { null } ?: "发送失败（HTTP $code）"))
+        } catch (e: java.net.SocketTimeoutException) {
+            Result.failure(Exception("网络超时，请检查网络后重试"))
+        } catch (e: java.net.UnknownHostException) {
+            Result.failure(Exception("网络连接失败，请检查网络"))
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception("发送失败：${e.message}"))
         }
     }
 
-    /** 验证邮箱验证码完成两步验证，返回 token */
+    /** 验证邮箱验证码完成两步验证，返回 accessToken */
     suspend fun verify2fa(mfaTicket: String, code: String, rememberDevice: Boolean): Result<LoginResult> {
         return try {
-            val resp = api.verify2fa(Verify2faRequest(mfaTicket, code, rememberDevice))
+            val resp = api.verify2fa(
+                Verify2faRequest(
+                    ticket = mfaTicket,
+                    code = code,
+                    useRecovery = false,
+                    rememberDevice = rememberDevice
+                )
+            )
             if (resp.data != null) Result.success(resp.data)
             else Result.failure(Exception(resp.message.ifEmpty { "验证失败" }))
         } catch (e: HttpException) {
