@@ -9,7 +9,7 @@ import androidx.leanback.widget.HeaderItem
 import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.ListRowPresenter
 import androidx.leanback.widget.OnItemViewClickedListener
-import androidx.leanback.widget.RowsSupportFragment
+import androidx.leanback.app.RowsSupportFragment
 import androidx.lifecycle.lifecycleScope
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R

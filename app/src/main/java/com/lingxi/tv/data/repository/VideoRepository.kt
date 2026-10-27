@@ -2,7 +2,15 @@ package com.lingxi.tv.data.repository
 
 import com.lingxi.tv.data.api.ApiClient
 import com.lingxi.tv.data.model.ActionResult
+import com.lingxi.tv.data.model.AdminComment
+import com.lingxi.tv.data.model.AdminOverview
+import com.lingxi.tv.data.model.AdminReport
+import com.lingxi.tv.data.model.AdminUser
+import com.lingxi.tv.data.model.AdminVideo
 import com.lingxi.tv.data.model.Captcha
+import com.lingxi.tv.data.model.CheckinResult
+import com.lingxi.tv.data.model.Conversation
+import com.lingxi.tv.data.model.UserProfile
 import com.lingxi.tv.data.model.DanmakuList
 import com.lingxi.tv.data.model.GatewayInfo
 import com.lingxi.tv.data.model.LoginResult
@@ -207,6 +215,154 @@ class VideoRepository {
     suspend fun toggleFollow(uid: Long): Result<ActionResult> {
         return try {
             val resp = api.toggleFollow(uid)
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
+            else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // ==================== 用户资料 ====================
+
+    suspend fun getMyProfile(): Result<UserProfile> {
+        return try {
+            val resp = api.getMyProfile()
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取资料失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun updateMyProfile(nickname: String?, bio: String?): Result<UserProfile> {
+        return try {
+            val resp = api.updateMyProfile(nickname, bio)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "更新失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun checkin(): Result<CheckinResult> {
+        return try {
+            val resp = api.checkin()
+            if (resp.isSuccess) Result.success(resp.data ?: CheckinResult(success = true))
+            else Result.failure(Exception(resp.message.ifEmpty { "签到失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun changePassword(oldPassword: String, newPassword: String): Result<ActionResult> {
+        return try {
+            val resp = api.changePassword(oldPassword, newPassword)
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
+            else Result.failure(Exception(resp.message.ifEmpty { "修改密码失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun getConversations(): Result<PageData<Conversation>> {
+        return try {
+            val resp = api.getConversations()
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取消息失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // ==================== 管理员 ====================
+
+    suspend fun getAdminOverview(): Result<AdminOverview> {
+        return try {
+            val resp = api.getAdminOverview()
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取总览失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun getAdminVideos(status: String? = null, page: Int = 1): Result<PageData<AdminVideo>> {
+        return try {
+            val resp = api.getAdminVideos(status, page)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取稿件失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun reviewVideo(id: Long, action: String, reason: String? = null): Result<ActionResult> {
+        return try {
+            val resp = api.reviewVideo(id, action, reason)
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
+            else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun pinVideo(id: Long): Result<ActionResult> {
+        return try {
+            val resp = api.pinVideo(id)
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
+            else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun getAdminComments(keyword: String? = null, page: Int = 1): Result<PageData<AdminComment>> {
+        return try {
+            val resp = api.getAdminComments(keyword, page)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取评论失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun deleteComment(id: Long): Result<ActionResult> {
+        return try {
+            val resp = api.deleteComment(id)
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
+            else Result.failure(Exception(resp.message.ifEmpty { "删除失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun getAdminDanmaku(keyword: String? = null, page: Int = 1): Result<PageData<AdminComment>> {
+        return try {
+            val resp = api.getAdminDanmaku(keyword, page)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取弹幕失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun deleteDanmaku(id: Long): Result<ActionResult> {
+        return try {
+            val resp = api.deleteDanmaku(id)
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
+            else Result.failure(Exception(resp.message.ifEmpty { "删除失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun getAdminReports(status: String? = null, page: Int = 1): Result<PageData<AdminReport>> {
+        return try {
+            val resp = api.getAdminReports(status, page)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取举报失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun handleReport(id: Long, action: String): Result<ActionResult> {
+        return try {
+            val resp = api.handleReport(id, action)
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
+            else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun getAdminUsers(keyword: String? = null, page: Int = 1): Result<PageData<AdminUser>> {
+        return try {
+            val resp = api.getAdminUsers(keyword, page)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取用户失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun banUser(id: Long): Result<ActionResult> {
+        return try {
+            val resp = api.banUser(id)
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
+            else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun setUserRole(id: Long, role: String): Result<ActionResult> {
+        return try {
+            val resp = api.setUserRole(id, role)
             if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
             else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
         } catch (e: Exception) { Result.failure(e) }

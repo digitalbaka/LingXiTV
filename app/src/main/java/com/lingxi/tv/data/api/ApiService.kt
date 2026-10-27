@@ -1,8 +1,15 @@
 package com.lingxi.tv.data.api
 
 import com.lingxi.tv.data.model.ActionResult
+import com.lingxi.tv.data.model.AdminComment
+import com.lingxi.tv.data.model.AdminOverview
+import com.lingxi.tv.data.model.AdminReport
+import com.lingxi.tv.data.model.AdminUser
+import com.lingxi.tv.data.model.AdminVideo
 import com.lingxi.tv.data.model.ApiResponse
 import com.lingxi.tv.data.model.Captcha
+import com.lingxi.tv.data.model.CheckinResult
+import com.lingxi.tv.data.model.Conversation
 import com.lingxi.tv.data.model.DanmakuList
 import com.lingxi.tv.data.model.GatewayInfo
 import com.lingxi.tv.data.model.LoginResult
@@ -10,6 +17,7 @@ import com.lingxi.tv.data.model.PageData
 import com.lingxi.tv.data.model.Partition
 import com.lingxi.tv.data.model.SearchResult
 import com.lingxi.tv.data.model.User
+import com.lingxi.tv.data.model.UserProfile
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoDetail
 import retrofit2.http.Body
@@ -146,5 +154,114 @@ interface ApiService {
     @POST("/api/v1/follow")
     suspend fun toggleFollow(
         @Query("uid") uid: Long
+    ): ApiResponse<ActionResult>
+
+    // ==================== 用户资料 ====================
+
+    /** 当前用户完整资料 */
+    @GET("/api/v1/users/me")
+    suspend fun getMyProfile(): ApiResponse<UserProfile>
+
+    /** 更新昵称与签名 */
+    @POST("/api/v1/users/me")
+    suspend fun updateMyProfile(
+        @Query("nickname") nickname: String? = null,
+        @Query("bio") bio: String? = null
+    ): ApiResponse<UserProfile>
+
+    /** 每日签到 */
+    @POST("/api/v1/users/me/checkin")
+    suspend fun checkin(): ApiResponse<CheckinResult>
+
+    /** 修改密码 */
+    @POST("/api/v1/users/me/password")
+    suspend fun changePassword(
+        @Query("oldPassword") oldPassword: String,
+        @Query("newPassword") newPassword: String
+    ): ApiResponse<ActionResult>
+
+    /** 消息会话列表 */
+    @GET("/api/v1/messages/conversations")
+    suspend fun getConversations(): ApiResponse<PageData<Conversation>>
+
+    // ==================== 管理员 ====================
+
+    @GET("/api/v1/admin/overview")
+    suspend fun getAdminOverview(): ApiResponse<AdminOverview>
+
+    /** 稿件审核列表 */
+    @GET("/api/v1/admin/videos")
+    suspend fun getAdminVideos(
+        @Query("status") status: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 20
+    ): ApiResponse<PageData<AdminVideo>>
+
+    /** 稿件审核（approve/reject） */
+    @POST("/api/v1/admin/videos/{id}/review")
+    suspend fun reviewVideo(
+        @Path("id") id: Long,
+        @Query("action") action: String,
+        @Query("reason") reason: String? = null
+    ): ApiResponse<ActionResult>
+
+    /** 稿件置顶/取消置顶 */
+    @POST("/api/v1/admin/videos/{id}/pin")
+    suspend fun pinVideo(@Path("id") id: Long): ApiResponse<ActionResult>
+
+    /** 评论列表 */
+    @GET("/api/v1/admin/comments")
+    suspend fun getAdminComments(
+        @Query("q") keyword: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 20
+    ): ApiResponse<PageData<AdminComment>>
+
+    @POST("/api/v1/admin/comments/{id}/delete")
+    suspend fun deleteComment(@Path("id") id: Long): ApiResponse<ActionResult>
+
+    /** 弹幕列表 */
+    @GET("/api/v1/admin/danmaku")
+    suspend fun getAdminDanmaku(
+        @Query("q") keyword: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 20
+    ): ApiResponse<PageData<AdminComment>>
+
+    @POST("/api/v1/admin/danmaku/{id}/delete")
+    suspend fun deleteDanmaku(@Path("id") id: Long): ApiResponse<ActionResult>
+
+    /** 举报列表 */
+    @GET("/api/v1/admin/reports")
+    suspend fun getAdminReports(
+        @Query("status") status: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 20
+    ): ApiResponse<PageData<AdminReport>>
+
+    /** 处理举报（processed/ignored） */
+    @POST("/api/v1/admin/reports/{id}/handle")
+    suspend fun handleReport(
+        @Path("id") id: Long,
+        @Query("action") action: String
+    ): ApiResponse<ActionResult>
+
+    /** 用户管理列表 */
+    @GET("/api/v1/admin/users")
+    suspend fun getAdminUsers(
+        @Query("q") keyword: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 20
+    ): ApiResponse<PageData<AdminUser>>
+
+    /** 封禁/解封用户 */
+    @POST("/api/v1/admin/users/{id}/ban")
+    suspend fun banUser(@Path("id") id: Long): ApiResponse<ActionResult>
+
+    /** 设为管理员/取消管理员 */
+    @POST("/api/v1/admin/users/{id}/role")
+    suspend fun setUserRole(
+        @Path("id") id: Long,
+        @Query("role") role: String
     ): ApiResponse<ActionResult>
 }

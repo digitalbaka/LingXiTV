@@ -70,6 +70,30 @@
             android:screenOrientation="landscape"
             android:theme="@style/Theme.LingXiTV.NoActionBar" />
 
+        <activity
+            android:name=".ui.settings.SettingsActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.LingXiTV.NoActionBar" />
+
+        <activity
+            android:name=".ui.profile.ProfileActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.LingXiTV.NoActionBar" />
+
+        <activity
+            android:name=".ui.message.MessageActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.LingXiTV.NoActionBar" />
+
+        <activity
+            android:name=".ui.admin.AdminActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.LingXiTV.NoActionBar" />
+
     </application>
 
 </manifest>

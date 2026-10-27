@@ -381,6 +381,8 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // 从设置页返回后应用最新弹幕设置
+        danmakuView.applySettings()
         player?.play()
         danmakuView.setPlaying(true)
         startProgressUpdate()

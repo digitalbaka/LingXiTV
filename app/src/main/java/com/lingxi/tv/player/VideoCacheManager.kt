@@ -48,4 +48,29 @@ object VideoCacheManager {
             .setUpstreamDataSourceFactory(upstream)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
     }
+
+    /** 当前缓存大小（字节），未初始化返回 0 */
+    fun getCacheSizeBytes(context: Context): Long {
+        return try {
+            getCache(context).cacheSpace
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    /**
+     * 清空视频磁盘缓存。必须在无播放器使用时调用（设置页中调用安全）。
+     * 释放并重建 SimpleCache 以重新加目录锁。
+     */
+    fun clearCache(context: Context) {
+        synchronized(this) {
+            try {
+                simpleCache?.release()
+            } catch (_: Exception) {
+            }
+            simpleCache = null
+            val dir = File(context.cacheDir, "video_cache")
+            dir.deleteRecursively()
+        }
+    }
 }

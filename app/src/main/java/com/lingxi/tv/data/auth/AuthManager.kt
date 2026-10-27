@@ -58,6 +58,12 @@ object AuthManager {
 
     val isLoggedIn: Boolean get() = !token.isNullOrEmpty()
 
+    /** 管理员 UID 名单（本地鉴权） */
+    private val ADMIN_UIDS = setOf(1L, 3L, 12L, 62L, 106L)
+
+    /** 当前登录用户是否为管理员 */
+    val isAdmin: Boolean get() = isLoggedIn && (user?.id ?: 0L) in ADMIN_UIDS
+
     /**
      * 获取播放用的基础 URL：选中节点则用节点 URL，否则用主站
      */

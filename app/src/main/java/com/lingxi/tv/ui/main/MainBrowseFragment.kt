@@ -22,6 +22,8 @@ import com.lingxi.tv.ui.auth.LoginActivity
 import com.lingxi.tv.ui.list.VideoListActivity
 import com.lingxi.tv.ui.node.NodeSelectActivity
 import com.lingxi.tv.ui.player.PlayerActivity
+import com.lingxi.tv.ui.profile.ProfileActivity
+import com.lingxi.tv.ui.settings.SettingsActivity
 import kotlinx.coroutines.launch
 
 /**
@@ -146,7 +148,12 @@ class MainBrowseFragment : BrowseSupportFragment() {
         val adapter = ArrayObjectAdapter(MenuActionPresenter())
         val user = AuthManager.user
         if (AuthManager.isLoggedIn && user != null) {
-            adapter.add(MenuAction("当前用户：${user.nickname.ifEmpty { user.username }}") {})
+            adapter.add(MenuAction("我的：${user.nickname.ifEmpty { user.username }}") {
+                startActivity(Intent(requireContext(), ProfileActivity::class.java))
+            })
+            adapter.add(MenuAction("设置") {
+                startActivity(Intent(requireContext(), SettingsActivity::class.java))
+            })
             adapter.add(MenuAction("切换节点（当前：${AuthManager.nodeName ?: "主站"}）") {
                 startActivity(Intent(requireContext(), NodeSelectActivity::class.java))
             })

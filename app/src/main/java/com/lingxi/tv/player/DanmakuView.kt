@@ -53,7 +53,25 @@ class DanmakuView @JvmOverloads constructor(
     var maxBottomTracks: Int = 3
     var maxScreenCount: Int = 80
     var scrollSpeedBase: Float = 200f // px/s
-    var textScale: Float = 1.4f // 电视端放大弹幕字号
+    var textScale: Float = DanmakuSettings.textScale // 电视端放大弹幕字号
+
+    /** 弹幕不透明度（30-255） */
+    var danmakuAlpha: Int = DanmakuSettings.alpha
+        set(value) {
+            field = value.coerceIn(30, 255)
+            invalidate()
+        }
+
+    /** 速度倍率（作用于滚动弹幕） */
+    var speedScale: Float = DanmakuSettings.speedScale
+
+    /** 应用持久化设置（设置页修改后调用） */
+    fun applySettings() {
+        textScale = DanmakuSettings.textScale
+        speedScale = DanmakuSettings.speedScale
+        danmakuAlpha = DanmakuSettings.alpha
+        invalidate()
+    }
 
     private val density: Float = resources.displayMetrics.density
 
@@ -117,7 +135,8 @@ class DanmakuView @JvmOverloads constructor(
             allDanmaku[lastDispatchIndex].timeMs <= now
         ) {
             val d = allDanmaku[lastDispatchIndex]
-            if (activeDanmaku.size < maxScreenCount) {
+            // 屏蔽词过滤：命中直接跳过，不占用屏幕名额
+            if (!DanmakuSettings.isBlocked(d.content) && activeDanmaku.size < maxScreenCount) {
                 spawnDanmaku(d)
             }
             lastDispatchIndex++
@@ -159,7 +178,7 @@ class DanmakuView @JvmOverloads constructor(
                 item.track = findFreeTrack(scrollTrackTimes, maxScrollTracks)
                 item.y = (item.track + 1) * lineHeight
                 item.x = viewWidth
-                item.speed = scrollSpeedBase * density * (1f + item.width / 600f)
+                item.speed = scrollSpeedBase * speedScale * density * (1f + item.width / 600f)
                 reserveTrack(scrollTrackTimes, item.track,
                     ((item.width + viewWidth) / item.speed * 1000).toLong())
             }
@@ -239,13 +258,16 @@ class DanmakuView @JvmOverloads constructor(
 
             paint.textSize = item.fontSize.toFloat()
             paint.color = Color.BLACK
+            paint.alpha = danmakuAlpha
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 3f
             canvas.drawText(item.content, item.x, item.y, paint)
 
             paint.color = item.color
+            paint.alpha = danmakuAlpha
             paint.style = Paint.Style.FILL
             canvas.drawText(item.content, item.x, item.y, paint)
+            paint.alpha = 255
         }
 
         if (isPlaying) {

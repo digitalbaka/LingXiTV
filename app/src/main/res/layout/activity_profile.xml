@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_dark"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="36dp"
+        android:maxWidth="860dp">
+
+        <!-- 用户信息卡 -->
+        <LinearLayout style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:id="@+id/ivAvatar"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:background="@color/card_bg"
+                    android:contentDescription="头像" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginStart="16dp">
+
+                    <TextView
+                        android:id="@+id/tvNickname"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_primary"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvMeta"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp"
+                        android:layout_marginTop="4dp" />
+
+                    <TextView
+                        android:id="@+id/tvExp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/lingxi_green_light"
+                        android:textSize="13sp"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvSettings"
+                    style="@style/SettingsItem"
+                    android:layout_width="wrap_content"
+                    android:text="设置 ⚙" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvBio"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:layout_marginTop="12dp" />
+
+            <Button
+                android:id="@+id/btnCheckin"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="每日签到"
+                android:backgroundTint="@color/lingxi_green"
+                android:textColor="@android:color/white"
+                android:layout_marginTop="12dp" />
+        </LinearLayout>
+
+        <!-- 统计 -->
+        <LinearLayout style="@style/SettingsCard"
+            android:orientation="horizontal"
+            android:layout_marginTop="16dp">
+
+            <TextView android:id="@+id/tvStatWorks" style="@style/StatItem" android:text="稿件\n-" />
+            <TextView android:id="@+id/tvStatFav" style="@style/StatItem" android:text="收藏\n-" />
+            <TextView android:id="@+id/tvStatHistory" style="@style/StatItem" android:text="历史\n-" />
+            <TextView android:id="@+id/tvStatDanmaku" style="@style/StatItem" android:text="弹幕\n-" />
+            <TextView android:id="@+id/tvStatComment" style="@style/StatItem" android:text="评论\n-" />
+        </LinearLayout>
+
+        <!-- 菜单 -->
+        <LinearLayout style="@style/SettingsCard"
+            android:orientation="vertical"
+            android:layout_marginTop="16dp">
+
+            <TextView android:id="@+id/menuHistory" style="@style/SettingsItem" android:text="观看历史" />
+            <TextView android:id="@+id/menuFavorites" style="@style/SettingsItem" android:text="我的收藏夹" />
+            <TextView android:id="@+id/menuFollowing" style="@style/SettingsItem" android:text="关注动态" />
+            <TextView android:id="@+id/menuMessages" style="@style/SettingsItem" android:text="消息中心" />
+            <TextView android:id="@+id/menuAdmin" style="@style/SettingsItem" android:text="管理后台" android:visibility="gone" />
+            <TextView android:id="@+id/menuAbout" style="@style/SettingsItem" android:text="关于本站" />
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

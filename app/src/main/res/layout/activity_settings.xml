@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_dark"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="36dp"
+        android:maxWidth="860dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="设置"
+            android:textColor="@color/text_primary"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="24dp" />
+
+        <!-- 个人资料 -->
+        <TextView style="@style/SettingsSection" android:text="个人资料" />
+
+        <LinearLayout style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:id="@+id/ivAvatar"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="@color/card_bg"
+                    android:contentDescription="头像" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginStart="16dp">
+
+                    <TextView
+                        android:id="@+id/tvNickname"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_primary"
+                        android:textSize="20sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvUidLevel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvEditProfile"
+                style="@style/SettingsItem"
+                android:text="编辑昵称与签名" />
+        </LinearLayout>
+
+        <!-- 网络 -->
+        <TextView style="@style/SettingsSection" android:text="网络" />
+
+        <LinearLayout style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvNode"
+                style="@style/SettingsItem"
+                android:text="接入节点" />
+
+            <TextView
+                android:id="@+id/tvClearCache"
+                style="@style/SettingsItem"
+                android:text="清除缓存" />
+        </LinearLayout>
+
+        <!-- 播放与弹幕 -->
+        <TextView style="@style/SettingsSection" android:text="播放与弹幕" />
+
+        <LinearLayout style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvDanmakuSettings"
+                style="@style/SettingsItem"
+                android:text="弹幕设置（字号 / 速度 / 不透明度 / 屏蔽词）" />
+
+            <TextView
+                android:id="@+id/tvTheme"
+                style="@style/SettingsItem"
+                android:text="主题外观：跟随系统（电视端固定深色）" />
+        </LinearLayout>
+
+        <!-- 账号安全 -->
+        <TextView style="@style/SettingsSection" android:text="账号安全" />
+
+        <LinearLayout style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvChangePassword"
+                style="@style/SettingsItem"
+                android:text="修改密码" />
+
+            <TextView
+                android:id="@+id/tvLogout"
+                style="@style/SettingsItem"
+                android:text="退出登录"
+                android:textColor="#E57373" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="32dp"
+            android:text="凌汐弹幕网 LingXi TV 版"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvVersion"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+</ScrollView>
