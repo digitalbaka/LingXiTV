@@ -202,11 +202,16 @@ class LoginActivity : AppCompatActivity() {
                     showStatus("验证码已发送到绑定邮箱，请查收")
                     startCountdown()
                 }
-                .onFailure {
+                .onFailure { e ->
                     btnSendCode.isEnabled = true
-                    showStatus("发送失败：${it.message}")
-                    // 图形验证码可能已被消耗，刷新
-                    loadCaptcha()
+                    val msg = e.message ?: "发送失败"
+                    showStatus("发送失败：$msg")
+                    // 只有图形验证码确实被服务端判定错误/过期时才刷新
+                    // 网络错误 / 502 / 票据无效 等不应该刷新，让用户重试即可
+                    if (msg.contains("图形验证码") || msg.contains("验证码不正确") ||
+                        msg.contains("验证码已过期") || msg.contains("captcha")) {
+                        loadCaptcha()
+                    }
                 }
         }
     }
