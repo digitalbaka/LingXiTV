@@ -1,4 +1,4 @@
-package com.lingxi.tv.ui.search
+﻿package com.lingxi.tv.ui.search
 
 import android.content.Intent
 import android.os.Bundle
@@ -13,6 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
 import com.lingxi.tv.data.model.Video
+import com.lingxi.tv.ui.article.ArticleActivity
 import com.lingxi.tv.ui.main.VideoCardPresenter
 import com.lingxi.tv.ui.player.PlayerActivity
 import kotlinx.coroutines.Job
@@ -51,6 +52,12 @@ class SearchActivity : FragmentActivity(), SearchSupportFragment.SearchResultPro
         searchFragment.setSearchResultProvider(this)
         searchFragment.setOnItemViewClickedListener { _, item, _, _ ->
             val video = item as? Video ?: return@setOnItemViewClickedListener
+            // 文章走阅读页，视频/音频走播放器
+            if (video.isArticle) {
+                startActivity(Intent(this, ArticleActivity::class.java)
+                    .putExtra(ArticleActivity.EXTRA_ARTICLE_ID, video.id))
+                return@setOnItemViewClickedListener
+            }
             val intent = Intent(this, PlayerActivity::class.java).apply {
                 putExtra(PlayerActivity.EXTRA_VIDEO_ID, video.id)
             }
@@ -125,7 +132,7 @@ class SearchActivity : FragmentActivity(), SearchSupportFragment.SearchResultPro
                         listRowAdapter = firstRow?.adapter as? ArrayObjectAdapter ?: return@onSuccess
                     }
                     val beforeSize = listRowAdapter.size()
-                    searchResult.items.filter { it.isVideo }.forEach {
+                    searchResult.items.filter { it.isVideo || it.isAudio || it.isArticle }.forEach {
                         listRowAdapter.add(it)
                     }
                     hasMore = searchResult.hasMore && listRowAdapter.size() < searchResult.total

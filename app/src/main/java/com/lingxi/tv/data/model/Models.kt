@@ -78,6 +78,7 @@ data class Video(
     val viewer: ViewerInfo? = null
 ) {
     val isArticle: Boolean get() = kind == "article"
+    val isAudio: Boolean get() = kind == "audio"
     val isVideo: Boolean get() = kind == "video"
 
     fun getFullCoverUrl(baseUrl: String): String = joinUrl(baseUrl, cover)

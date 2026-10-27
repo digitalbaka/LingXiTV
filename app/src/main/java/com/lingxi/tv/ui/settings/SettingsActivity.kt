@@ -37,6 +37,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvNickname: TextView
     private lateinit var tvUidLevel: TextView
     private lateinit var tvNode: TextView
+    private lateinit var tvCacheLimit: TextView
     private lateinit var tvClearCache: TextView
     private lateinit var tvDanmakuSettings: TextView
     private lateinit var tvVersion: TextView
@@ -51,6 +52,7 @@ class SettingsActivity : AppCompatActivity() {
         tvNickname = findViewById(R.id.tvNickname)
         tvUidLevel = findViewById(R.id.tvUidLevel)
         tvNode = findViewById(R.id.tvNode)
+        tvCacheLimit = findViewById(R.id.tvCacheLimit)
         tvClearCache = findViewById(R.id.tvClearCache)
         tvDanmakuSettings = findViewById(R.id.tvDanmakuSettings)
         tvVersion = findViewById(R.id.tvVersion)
@@ -60,6 +62,7 @@ class SettingsActivity : AppCompatActivity() {
             startActivity(Intent(this, NodeSelectActivity::class.java))
         }
         tvClearCache.setOnClickListener { showClearCacheDialog() }
+        tvCacheLimit.setOnClickListener { showCacheLimitDialog() }
         tvDanmakuSettings.setOnClickListener { showDanmakuSettingsDialog() }
         findViewById<TextView>(R.id.tvTheme).setOnClickListener { showThemeDialog() }
         findViewById<TextView>(R.id.tvChangePassword).setOnClickListener { showChangePasswordDialog() }
@@ -77,6 +80,7 @@ class SettingsActivity : AppCompatActivity() {
 
         updateNodeLabel()
         updateCacheLabel()
+        updateCacheLimitLabel()
         updateDanmakuLabel()
         loadProfile()
     }
@@ -85,6 +89,7 @@ class SettingsActivity : AppCompatActivity() {
         super.onResume()
         updateNodeLabel()
         updateCacheLabel()
+        updateCacheLimitLabel()
     }
 
     private fun loadProfile() {
@@ -127,6 +132,30 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun updateNodeLabel() {
         tvNode.text = "接入节点：${AuthManager.nodeName ?: "主站"}"
+    }
+
+    private fun updateCacheLimitLabel() {
+        tvCacheLimit.text = "缓存上限：${VideoCacheManager.getCacheLimitMb(this)} MB（启动时超出自动清理）"
+    }
+
+    /** 缓存上限选择：50 / 100 / 150 / 200 MB */
+    private fun showCacheLimitDialog() {
+        val options = VideoCacheManager.CACHE_LIMIT_OPTIONS_MB
+        val current = VideoCacheManager.getCacheLimitMb(this)
+        val checked = options.indexOf(current).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("缓存上限")
+            .setSingleChoiceItems(
+                options.map { "$it MB" }.toTypedArray(), checked
+            ) { dialog, which ->
+                VideoCacheManager.setCacheLimitMb(this, options[which])
+                updateCacheLimitLabel()
+                updateCacheLabel()
+                Toast.makeText(this, "缓存上限已设为 ${options[which]} MB", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun updateCacheLabel() {

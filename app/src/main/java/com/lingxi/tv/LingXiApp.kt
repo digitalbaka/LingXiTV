@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ComponentCallbacks2
 import com.bumptech.glide.Glide
 import com.lingxi.tv.data.repository.VideoRepository
+import com.lingxi.tv.player.VideoCacheManager
 
 /**
  * 凌汐弹幕网电视版 Application
@@ -22,6 +23,8 @@ class LingXiApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // 启动自动清理：视频缓存超出用户设定的上限则清空（子线程，避免阻塞启动）
+        Thread { VideoCacheManager.trimIfOverLimit(this) }.start()
     }
 
     /**

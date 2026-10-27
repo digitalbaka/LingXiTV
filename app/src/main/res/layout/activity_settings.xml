@@ -85,6 +85,11 @@
                 android:text="接入节点" />
 
             <TextView
+                android:id="@+id/tvCacheLimit"
+                style="@style/SettingsItem"
+                android:text="缓存上限" />
+
+            <TextView
                 android:id="@+id/tvClearCache"
                 style="@style/SettingsItem"
                 android:text="清除缓存" />

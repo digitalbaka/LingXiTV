@@ -67,6 +67,9 @@ class VideoCardPresenter : Presenter() {
 
     private fun buildContentText(video: Video): String {
         val parts = mutableListOf<String>()
+        // 文章/音频没有视频时长概念，标注类型便于区分
+        if (video.isArticle) parts.add("文章")
+        if (video.isAudio) parts.add("音频")
         if (video.viewCount > 0) {
             parts.add("${FormatUtils.formatCount(video.viewCount)}播放")
         }

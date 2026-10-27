@@ -1,4 +1,4 @@
-package com.lingxi.tv.ui.main
+﻿package com.lingxi.tv.ui.main
 
 import android.content.Intent
 import android.graphics.Color
@@ -21,6 +21,7 @@ import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.ui.auth.LoginActivity
 import com.lingxi.tv.ui.list.VideoListActivity
 import com.lingxi.tv.ui.node.NodeSelectActivity
+import com.lingxi.tv.ui.article.ArticleActivity
 import com.lingxi.tv.ui.player.PlayerActivity
 import com.lingxi.tv.ui.profile.ProfileActivity
 import com.lingxi.tv.ui.settings.SettingsActivity
@@ -70,6 +71,14 @@ class MainBrowseFragment : BrowseSupportFragment() {
         onItemViewClickedListener = OnItemViewClickedListener { _, item, _, row ->
             when (item) {
                 is Video -> {
+                    // 文章走阅读页，视频/音频走播放器
+                    if (item.isArticle) {
+                        startActivity(
+                            Intent(requireContext(), ArticleActivity::class.java)
+                                .putExtra(ArticleActivity.EXTRA_ARTICLE_ID, item.id)
+                        )
+                        return@OnItemViewClickedListener
+                    }
                     val intent = Intent(requireContext(), PlayerActivity::class.java)
                     // 关注动态：全屏播放并按向下键连续切换下一条
                     if (row?.headerItem?.id == HEADER_FOLLOWING) {
@@ -186,7 +195,7 @@ class MainBrowseFragment : BrowseSupportFragment() {
         lifecycleScope.launch {
             val result = repository.getRanking()
             result.onSuccess { pageData ->
-                pageData.items.filter { it.isVideo }.forEach { innerAdapter.add(it) }
+                pageData.items.filter { it.isVideo || it.isAudio || it.isArticle }.forEach { innerAdapter.add(it) }
             }.onFailure {
                 Log.e(TAG, "loadRanking failed", it)
             }
@@ -211,7 +220,7 @@ class MainBrowseFragment : BrowseSupportFragment() {
                 else -> repository.getFollowingVideos()
             }
             result.onSuccess { pageData ->
-                pageData.items.filter { it.isVideo }.forEach { innerAdapter.add(it) }
+                pageData.items.filter { it.isVideo || it.isAudio || it.isArticle }.forEach { innerAdapter.add(it) }
             }.onFailure {
                 Log.e(TAG, "loadUserContent($type) failed", it)
             }
@@ -281,7 +290,7 @@ class MainBrowseFragment : BrowseSupportFragment() {
                 )
                 result.onSuccess { pageData ->
                     val beforeSize = innerAdapter.size()
-                    pageData.items.filter { it.isVideo }.forEach { video ->
+                    pageData.items.filter { it.isVideo || it.isAudio || it.isArticle }.forEach { video ->
                         innerAdapter.add(video)
                     }
                     val addedCount = innerAdapter.size() - beforeSize

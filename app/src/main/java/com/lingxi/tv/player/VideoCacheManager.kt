@@ -17,17 +17,65 @@ import java.io.File
  */
 object VideoCacheManager {
 
-    /** 缓存上限 512MB，超出后按最近最少使用淘汰 */
-    private const val MAX_CACHE_BYTES = 512L * 1024 * 1024
+    /** 可选缓存上限（MB），用户在设置页选择 */
+    val CACHE_LIMIT_OPTIONS_MB = intArrayOf(50, 100, 150, 200)
+    private const val DEFAULT_CACHE_LIMIT_MB = 200
+    private const val PREFS_NAME = "lingxi_cache"
+    private const val KEY_LIMIT_MB = "cache_limit_mb"
 
     @Volatile
     private var simpleCache: SimpleCache? = null
+
+    /** 当前缓存上限（字节） */
+    fun getCacheLimitBytes(context: Context): Long {
+        val mb = context.applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getInt(KEY_LIMIT_MB, DEFAULT_CACHE_LIMIT_MB)
+        return mb * 1024L * 1024L
+    }
+
+    fun getCacheLimitMb(context: Context): Int =
+        (getCacheLimitBytes(context) / 1024 / 1024).toInt()
+
+    /**
+     * 设置缓存上限（MB）。保存后释放旧缓存实例，下次使用按新上限重建
+     * （SimpleCache 的 LRU 淘汰器会自动把存量缓存修剪到新上限以内）
+     */
+    fun setCacheLimitMb(context: Context, mb: Int) {
+        context.applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_LIMIT_MB, mb).apply()
+        synchronized(this) {
+            try {
+                simpleCache?.release()
+            } catch (_: Exception) {
+            }
+            simpleCache = null
+        }
+    }
+
+    /**
+     * 启动时自动清理：缓存目录超出用户选择的上限则整体删除。
+     * 必须在任何 SimpleCache 实例创建之前调用（Application.onCreate）。
+     */
+    fun trimIfOverLimit(context: Context) {
+        try {
+            val dir = File(context.cacheDir, "video_cache")
+            if (!dir.exists()) return
+            val limit = getCacheLimitBytes(context)
+            val size = dir.walkBottomUp().filter { it.isFile }.sumOf { it.length() }
+            if (size > limit) {
+                dir.deleteRecursively()
+            }
+        } catch (_: Exception) {
+        }
+    }
 
     fun getCache(context: Context): SimpleCache {
         return simpleCache ?: synchronized(this) {
             simpleCache ?: SimpleCache(
                 File(context.cacheDir, "video_cache"),
-                LeastRecentlyUsedCacheEvictor(MAX_CACHE_BYTES),
+                LeastRecentlyUsedCacheEvictor(getCacheLimitBytes(context)),
                 StandaloneDatabaseProvider(context.applicationContext)
             ).also { simpleCache = it }
         }

@@ -1,4 +1,4 @@
-package com.lingxi.tv.ui.player
+﻿package com.lingxi.tv.ui.player
 
 import android.net.Uri
 import android.os.Bundle
@@ -112,9 +112,7 @@ class PlayerActivity : AppCompatActivity() {
 
         feedMode = intent.getBooleanExtra(EXTRA_FEED_MODE, false)
         if (feedMode) {
-            // 关注动态：铺满全屏（裁剪边缘），而不是留黑边
-            playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-            currentResizeMode = 1
+            // 关注动态：默认与其他视频一致用「适应屏幕」，用户可手动切画面比例
             feedIndex = intent.getIntExtra(EXTRA_START_INDEX, 0).coerceAtLeast(0)
             loadFeed()
             return
@@ -163,7 +161,7 @@ class PlayerActivity : AppCompatActivity() {
                 finish()
                 return@launch
             }
-            feedVideos.addAll(page.items.filter { it.isVideo })
+            feedVideos.addAll(page.items.filter { it.isVideo || it.isAudio })
             feedPage = 1
             feedHasMore = page.hasMore
             if (feedVideos.isEmpty()) {
@@ -205,7 +203,7 @@ class PlayerActivity : AppCompatActivity() {
             }
             feedPage++
             feedHasMore = page.hasMore
-            feedVideos.addAll(page.items.filter { it.isVideo })
+            feedVideos.addAll(page.items.filter { it.isVideo || it.isAudio })
             if (feedIndex + 1 < feedVideos.size) {
                 playFeed(feedIndex + 1)
             } else {

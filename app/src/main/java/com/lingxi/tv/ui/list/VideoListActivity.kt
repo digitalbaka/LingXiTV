@@ -1,4 +1,4 @@
-package com.lingxi.tv.ui.list
+﻿package com.lingxi.tv.ui.list
 
 import android.content.Intent
 import android.os.Bundle
@@ -17,6 +17,7 @@ import com.lingxi.tv.data.auth.AuthManager
 import com.lingxi.tv.data.model.PageData
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.ui.auth.LoginActivity
+import com.lingxi.tv.ui.article.ArticleActivity
 import com.lingxi.tv.ui.main.VideoCardPresenter
 import com.lingxi.tv.ui.player.PlayerActivity
 import kotlinx.coroutines.launch
@@ -63,6 +64,12 @@ class VideoListActivity : FragmentActivity() {
 
         rowsFragment.onItemViewClickedListener = OnItemViewClickedListener { _, item, _, _ ->
             val video = item as? Video ?: return@OnItemViewClickedListener
+            // 文章走阅读页，视频/音频走播放器
+            if (video.isArticle) {
+                startActivity(Intent(this, ArticleActivity::class.java)
+                    .putExtra(ArticleActivity.EXTRA_ARTICLE_ID, video.id))
+                return@OnItemViewClickedListener
+            }
             val intent = Intent(this, PlayerActivity::class.java).apply {
                 putExtra(PlayerActivity.EXTRA_VIDEO_ID, video.id)
             }
@@ -103,7 +110,7 @@ class VideoListActivity : FragmentActivity() {
             }
             result.onSuccess { pageData ->
                 val listAdapter = ArrayObjectAdapter(VideoCardPresenter())
-                pageData.items.filter { it.isVideo }.forEach { listAdapter.add(it) }
+                pageData.items.filter { it.isVideo || it.isAudio || it.isArticle }.forEach { listAdapter.add(it) }
                 val header = HeaderItem(0, TITLES[type] ?: "")
                 rowsAdapter.add(ListRow(header, listAdapter))
             }.onFailure {
