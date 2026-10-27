@@ -11,6 +11,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.DecodeFormat
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
 import com.lingxi.tv.data.api.ApiClient
@@ -99,6 +100,7 @@ class SettingsActivity : AppCompatActivity() {
             val url = it.getFullAvatarUrl(ApiClient.BASE_URL)
             if (url.isEmpty()) ivAvatar.setImageResource(R.drawable.ic_avatar_placeholder)
             else Glide.with(this).load(url)
+                .format(DecodeFormat.PREFER_RGB_565)
                 .placeholder(R.drawable.ic_avatar_placeholder)
                 .error(R.drawable.ic_avatar_placeholder)
                 .circleCrop().into(ivAvatar)
@@ -114,6 +116,7 @@ class SettingsActivity : AppCompatActivity() {
                 } else {
                     Glide.with(this@SettingsActivity)
                         .load(url)
+                        .format(DecodeFormat.PREFER_RGB_565)
                         .placeholder(R.drawable.ic_avatar_placeholder)
                         .error(R.drawable.ic_avatar_placeholder)
                         .circleCrop().into(ivAvatar)

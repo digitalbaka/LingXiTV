@@ -82,18 +82,21 @@ class NodeSelectActivity : AppCompatActivity() {
     }
 
     /**
-     * 切换节点前必须先调用 /gateway/handoff 把当前 IP 授权到目标节点，
+     * 切换节点前必须先调用 /gateway/handoff 把当前公网 IP 授权到目标节点，
      * 否则节点会返回 40301 JSON，播放器一直缓冲无法播放。
+     * 授权响应里的 ip 必须保存——节点只靠 X-Forwarded-For 头识别来源，
+     * 播放请求要带上这个 IP（见 PlayerActivity.buildMediaSource）。
      */
     private fun selectNode(node: GatewayNode) {
         lifecycleScope.launch {
             repository.handoff(node.id).onSuccess { r ->
-                // 优先使用节点列表里的根地址，避免 handoff 返回的跳转地址带参数
-                val url = node.url.ifEmpty { r.url }
+                // 用节点列表里的根地址作为播放基准（handoff 返回的 url 带 lx_ticket 落地参数，是给浏览器跳转用的）
+                val url = node.url.ifEmpty { r.url.substringBefore('?') }
                 AuthManager.nodeId = node.id
                 // 地址为空时按主站处理，防止拼出非法播放地址
                 AuthManager.nodeUrl = url.ifEmpty { null }
                 AuthManager.nodeName = node.name
+                AuthManager.nodeGrantedIp = r.ip.ifEmpty { null }
                 Toast.makeText(this@NodeSelectActivity, "已切换到：${node.name}", Toast.LENGTH_SHORT).show()
                 updateCurrentInfo()
                 adapter.setData(nodes, node.id)
@@ -108,6 +111,7 @@ class NodeSelectActivity : AppCompatActivity() {
         AuthManager.nodeId = 0
         AuthManager.nodeUrl = null
         AuthManager.nodeName = null
+        AuthManager.nodeGrantedIp = null
         Toast.makeText(this, "已重置为主站", Toast.LENGTH_SHORT).show()
         updateCurrentInfo()
         adapter.setData(nodes, 0)

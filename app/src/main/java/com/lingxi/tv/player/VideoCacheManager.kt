@@ -36,13 +36,22 @@ object VideoCacheManager {
     /**
      * 包装了磁盘缓存的数据源工厂。
      * FLAG_IGNORE_CACHE_ON_ERROR：缓存读取失败时自动回退网络，保证可用性。
+     *
+     * defaultHeaders：对所有上游请求附加的默认请求头。直连节点场景需要
+     * X-Forwarded-For（节点靠它识别 handoff 授权的公网 IP）。
      */
-    fun cacheDataSourceFactory(context: Context): CacheDataSource.Factory {
+    fun cacheDataSourceFactory(
+        context: Context,
+        defaultHeaders: Map<String, String> = emptyMap()
+    ): CacheDataSource.Factory {
         val upstream = DefaultHttpDataSource.Factory()
             .setUserAgent("LingXiTV/1.0")
             .setConnectTimeoutMs(10_000)
             .setReadTimeoutMs(15_000)
             .setAllowCrossProtocolRedirects(true)
+        if (defaultHeaders.isNotEmpty()) {
+            upstream.setDefaultRequestProperties(defaultHeaders)
+        }
         return CacheDataSource.Factory()
             .setCache(getCache(context))
             .setUpstreamDataSourceFactory(upstream)

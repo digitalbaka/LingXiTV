@@ -11,6 +11,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.DecodeFormat
 import com.lingxi.tv.BuildConfig
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
@@ -128,6 +129,7 @@ class ProfileActivity : AppCompatActivity() {
             ivAvatar.setImageResource(R.drawable.ic_avatar_placeholder)
         } else {
             Glide.with(this).load(avatarUrl)
+                .format(DecodeFormat.PREFER_RGB_565)
                 .placeholder(R.drawable.ic_avatar_placeholder)
                 .error(R.drawable.ic_avatar_placeholder)
                 .circleCrop().into(ivAvatar)

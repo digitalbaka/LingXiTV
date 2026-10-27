@@ -23,6 +23,18 @@ data class PageData<T>(
 )
 
 /**
+ * 观看历史条目：GET /history 的 items 是 { video, progressMs, durationMs, percent, updatedAt }
+ * 嵌套结构，其中 video 是精简字段（无 src/qualityOptions，播放时需重新取详情）
+ */
+data class HistoryItem(
+    val video: Video? = null,
+    val progressMs: Long = 0,
+    val durationMs: Long = 0,
+    val percent: Int = 0,
+    val updatedAt: Long = 0
+)
+
+/**
  * 视频模型
  */
 data class Video(

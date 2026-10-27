@@ -20,6 +20,7 @@ import com.lingxi.tv.data.model.GatewayInfo
 import com.lingxi.tv.data.model.HandleReportRequest
 import com.lingxi.tv.data.model.HandoffRequest
 import com.lingxi.tv.data.model.HandoffResult
+import com.lingxi.tv.data.model.HistoryItem
 import com.lingxi.tv.data.model.LoginRequest
 import com.lingxi.tv.data.model.LoginResult
 import com.lingxi.tv.data.model.MeResponse
@@ -138,12 +139,12 @@ interface ApiService {
 
     // ==================== 用户内容（需登录）====================
 
-    /** 观看历史 */
+    /** 观看历史（items 为 {video, progressMs, ...} 嵌套结构） */
     @GET("/api/v1/history")
     suspend fun getHistory(
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 20
-    ): ApiResponse<PageData<Video>>
+    ): ApiResponse<PageData<HistoryItem>>
 
     /** 某个用户的收藏夹列表：GET /users/{uid}/folders */
     @GET("/api/v1/users/{uid}/folders")

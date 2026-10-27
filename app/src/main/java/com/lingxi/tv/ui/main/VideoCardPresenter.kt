@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import androidx.leanback.widget.ImageCardView
 import androidx.leanback.widget.Presenter
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.DecodeFormat
 import com.lingxi.tv.R
 import com.lingxi.tv.data.api.ApiClient
 import com.lingxi.tv.data.model.Video
@@ -46,6 +47,8 @@ class VideoCardPresenter : Presenter() {
             Glide.with(context)
                 .load(coverUrl)
                 .override(CARD_WIDTH, CARD_HEIGHT)
+                // RGB_565：封面图不要求 alpha，内存占用减半（TV 内存有限）
+                .format(DecodeFormat.PREFER_RGB_565)
                 .centerCrop()
                 .placeholder(R.drawable.ic_video_placeholder)
                 .error(R.drawable.ic_video_placeholder)

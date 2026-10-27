@@ -282,8 +282,19 @@ class VideoRepository {
     suspend fun getHistory(page: Int = 1, pageSize: Int = 20): Result<PageData<Video>> {
         return try {
             val resp = api.getHistory(page, pageSize)
-            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
-            else Result.failure(Exception(resp.message.ifEmpty { "获取历史记录失败" }))
+            val data = resp.data
+            if (resp.isSuccess && data != null) {
+                // 历史接口 items 是 {video, progressMs, ...} 嵌套结构，取出 video 字段
+                Result.success(
+                    PageData(
+                        items = data.items.mapNotNull { it.video },
+                        total = data.total,
+                        page = data.page,
+                        pageSize = data.pageSize,
+                        hasMore = data.hasMore
+                    )
+                )
+            } else Result.failure(Exception(resp.message.ifEmpty { "获取历史记录失败" }))
         } catch (e: Exception) { Result.failure(e) }
     }
 

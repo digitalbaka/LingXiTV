@@ -63,11 +63,30 @@
                         android:layout_marginTop="4dp" />
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/tvSettings"
-                    style="@style/SettingsItem"
+                <!-- 右侧操作列：签到 + 设置，纵向排列避免按钮漂浮错位 -->
+                <LinearLayout
                     android:layout_width="wrap_content"
-                    android:text="设置 ⚙" />
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal">
+
+                    <Button
+                        android:id="@+id/btnCheckin"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="每日签到"
+                        android:background="@drawable/btn_primary"
+                        android:textColor="@android:color/white"
+                        android:minWidth="160dp"
+                        android:focusable="true"
+                        android:clickable="true" />
+
+                    <TextView
+                        android:id="@+id/tvSettings"
+                        style="@style/SettingsItem"
+                        android:layout_width="wrap_content"
+                        android:text="设置 ⚙" />
+                </LinearLayout>
             </LinearLayout>
 
             <TextView
@@ -76,18 +95,6 @@
                 android:layout_height="wrap_content"
                 android:textColor="@color/text_secondary"
                 android:textSize="14sp"
-                android:layout_marginTop="12dp" />
-
-            <Button
-                android:id="@+id/btnCheckin"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="每日签到"
-                android:background="@drawable/btn_primary"
-                android:textColor="@android:color/white"
-                android:minWidth="160dp"
-                android:focusable="true"
-                android:clickable="true"
                 android:layout_marginTop="12dp" />
         </LinearLayout>
 

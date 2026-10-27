@@ -21,7 +21,6 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
-import com.lingxi.tv.data.api.ApiClient
 import com.lingxi.tv.data.auth.AuthManager
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoQuality
@@ -79,10 +78,10 @@ class PlayerActivity : AppCompatActivity() {
     private var maxRetryCount: Int = 3
     private var loopEnabled: Boolean = false
 
-    /** 当前清晰度/画质全部失败后，是否已回退主站 */
-    private var useMainSiteFallback: Boolean = false
     /** 本次播放是否已经尝试过换清晰度 */
     private var triedQualityFallback: Boolean = false
+    /** 本次播放失败后是否已经重新做过节点授权（公网 IP 可能变化） */
+    private var reHandoffTried: Boolean = false
     /** 本次页面是否已经做过节点授权 */
     private var nodeHandoffDone: Boolean = false
 
@@ -136,9 +135,19 @@ class PlayerActivity : AppCompatActivity() {
      * HLS (.m3u8) → HlsMediaSource（按分片缓冲，远距离 seek 正常）
      * 直链 (.mp4 等) → ProgressiveMediaSource
      * 都走磁盘缓存（CacheDataSource 按 segment/byte 缓存）
+     *
+     * 选中直连节点时必须附加 X-Forwarded-For 头：节点自身拿不到 TCP 来源 IP，
+     * 只靠该头识别 handoff 授权的公网 IP，否则返回 HTTP 200 + {code:40301} JSON，
+     * ExoPlayer 无法解析（UnrecognizedInputFormatException）
      */
     private fun buildMediaSource(url: String): MediaSource {
-        return DefaultMediaSourceFactory(VideoCacheManager.cacheDataSourceFactory(this))
+        val headers = mutableMapOf<String, String>()
+        val grantedIp = AuthManager.nodeGrantedIp
+        if (AuthManager.nodeId > 0 && !grantedIp.isNullOrEmpty()) {
+            headers["X-Forwarded-For"] = grantedIp
+            headers["X-Real-IP"] = grantedIp
+        }
+        return DefaultMediaSourceFactory(VideoCacheManager.cacheDataSourceFactory(this, headers))
             .createMediaSource(MediaItem.fromUri(Uri.parse(url)))
     }
 
@@ -227,26 +236,27 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * 切换节点后必须先向 /gateway/handoff 授权当前 IP，否则节点会返回
-     * HTTP 200 + {code:40301} 的 JSON，ExoPlayer 无法解析表现为无限加载。
-     * 授权失败时直接回退主站，保证至少能播主站资源。
+     * 切换节点后必须先向 /gateway/handoff 授权当前公网 IP，并把服务端回传的 IP
+     * 存到 AuthManager.nodeGrantedIp——播放时通过 X-Forwarded-For 头带给节点，
+     * 否则节点识别不了来源，返回 HTTP 200 + {code:40301} 的 JSON，表现为无法播放。
+     * 授权失败不回退主站（用户明确要求走自己选的节点），只提示并继续尝试。
      */
     private suspend fun ensureNodeHandoff() {
-        if (nodeHandoffDone || useMainSiteFallback) return
+        if (nodeHandoffDone) return
         if (AuthManager.nodeId <= 0) {
             nodeHandoffDone = true
             return
         }
         val result = repository.handoff(AuthManager.nodeId)
-        if (result.isSuccess) {
+        val data = result.getOrNull()
+        if (result.isSuccess && data != null) {
             nodeHandoffDone = true
-            Log.d(TAG, "handoff ok: nodeId=${AuthManager.nodeId}")
+            if (data.ip.isNotEmpty()) AuthManager.nodeGrantedIp = data.ip
+            Log.d(TAG, "handoff ok: nodeId=${AuthManager.nodeId} ip=${data.ip}")
         } else {
-            // 节点授权失败：本次播放改用主站，避免 40301 造成的无限缓冲
-            useMainSiteFallback = true
             val msg = result.exceptionOrNull()?.message ?: "未知错误"
             Log.w(TAG, "handoff failed: $msg")
-            Toast.makeText(this, "节点授权失败，已改用主站播放", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "节点授权失败：$msg，仍将尝试直连", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -257,10 +267,12 @@ class PlayerActivity : AppCompatActivity() {
         player?.release()
         player = null
 
+        // 每条视频都强制应用当前画面比例，防止任何路径（节点切换/重试/重建）留下错误的比例状态
+        playerView.resizeMode = RESIZE_MODES[currentResizeMode]
+
         retryCount = 0
         triedQualityFallback = false
-        // 注意：不要在这里重置 useMainSiteFallback。节点授权失败后整页都应走主站，
-        // 否则每切一条视频又会被打回不可用的节点地址。
+        reHandoffTried = false
 
         qualityList = video.qualityOptions
         // 优先选择 720p
@@ -309,13 +321,9 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** 当前播放基准地址：节点失效时回退主站 */
-    private fun playbackBase(): String {
-        return if (useMainSiteFallback) ApiClient.BASE_URL else AuthManager.getPlaybackBaseUrl()
-    }
-
+    /** 播放基准地址：始终走用户选择的节点（未选节点时为主站） */
     private fun currentPlayUrl(): String? {
-        val base = playbackBase()
+        val base = AuthManager.getPlaybackBaseUrl()
         val qualityUrl = qualityList.getOrNull(currentQualityIndex)
             ?.takeIf { it.url.isNotEmpty() }
             ?.getFullUrl(base)
@@ -335,9 +343,9 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * 处理播放错误：
-     * 0. 当前正在用节点——立即回退主站（节点未授权时返回 40301 JSON，重试没有意义）
-     * 1. 主站地址重试 3 次
+     * 处理播放错误（始终留在用户选择的节点，不回退主站）：
+     * 0. 节点播放首次失败——重新 handoff 授权一次（公网 IP 可能已变化）再重试
+     * 1. 重试 3 次
      * 2. 换一个清晰度
      */
     private fun handlePlaybackError(error: androidx.media3.common.PlaybackException) {
@@ -345,14 +353,15 @@ class PlayerActivity : AppCompatActivity() {
         val errorMsg = error.localizedMessage ?: "未知错误"
         val position = exoPlayer.currentPosition.coerceAtLeast(0L)
 
-        if (AuthManager.nodeId > 0 && !useMainSiteFallback) {
-            useMainSiteFallback = true
-            triedQualityFallback = false
-            retryCount = 0
-            currentQualityIndex = qualityList.indexOfFirst { it.height == 720 }.coerceAtLeast(0)
-            Log.w(TAG, "node playback failed, fallback to main site: $errorMsg")
-            Toast.makeText(this, "当前节点不可用，已回退主站", Toast.LENGTH_LONG).show()
-            playFrom(position)
+        if (AuthManager.nodeId > 0 && !reHandoffTried) {
+            reHandoffTried = true
+            nodeHandoffDone = false
+            Log.w(TAG, "node playback failed, re-handoff: $errorMsg")
+            Toast.makeText(this, "节点连接失败，正在重新授权…", Toast.LENGTH_SHORT).show()
+            lifecycleScope.launch {
+                ensureNodeHandoff()
+                playFrom(position)
+            }
             return
         }
 

@@ -20,6 +20,7 @@ object AuthManager {
     private const val KEY_NODE_URL = "node_url"
     private const val KEY_NODE_NAME = "node_name"
     private const val KEY_DEVICE_ID = "device_id"
+    private const val KEY_NODE_GRANTED_IP = "node_granted_ip"
 
     private val prefs: SharedPreferences by lazy {
         LingXiApp.get().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -64,6 +65,15 @@ object AuthManager {
     var nodeId: Long
         get() = prefs.getLong(KEY_NODE_ID, 0)
         set(value) = prefs.edit().putLong(KEY_NODE_ID, value).apply()
+
+    /**
+     * handoff 授权时服务端记录的本机公网 IP。
+     * 直连节点只看 X-Forwarded-For 请求头识别已授权设备（节点自身拿不到 TCP 来源 IP），
+     * 播放时必须带上该头，否则节点返回 HTTP 200 + {code:40301} 的 JSON
+     */
+    var nodeGrantedIp: String?
+        get() = prefs.getString(KEY_NODE_GRANTED_IP, null)
+        set(value) = prefs.edit().putString(KEY_NODE_GRANTED_IP, value).apply()
 
     val isLoggedIn: Boolean get() = !token.isNullOrEmpty()
 

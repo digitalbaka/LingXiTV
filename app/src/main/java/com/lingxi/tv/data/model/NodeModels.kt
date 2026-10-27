@@ -56,11 +56,14 @@ data class HandoffRequest(
 )
 
 /**
- * 节点授权响应：{ nodeId, url }
+ * 节点授权响应：{ nodeId, url, ip }
+ * url 带 lx_ticket（浏览器落地页用）；ip 为服务端记录的本机公网 IP，
+ * 直连节点据此校验 X-Forwarded-For 请求头
  */
 data class HandoffResult(
     val nodeId: Long = 0,
-    val url: String = ""
+    val url: String = "",
+    val ip: String = ""
 )
 
 /**
