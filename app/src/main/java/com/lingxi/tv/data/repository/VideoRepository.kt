@@ -34,6 +34,7 @@ import com.lingxi.tv.data.model.PinRequest
 import com.lingxi.tv.data.model.ReviewRequest
 import com.lingxi.tv.data.model.RoleRequest
 import com.lingxi.tv.data.model.SearchResult
+import com.lingxi.tv.data.model.SpaceInfo
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoDetail
 import com.lingxi.tv.data.model.BanRequest
@@ -142,6 +143,24 @@ class VideoRepository {
             val resp = api.getRanking()
             if (resp.isSuccess && resp.data != null) Result.success(resp.data)
             else Result.failure(Exception(resp.message.ifEmpty { "获取排行榜失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 用户空间信息（资料 + 统计） */
+    suspend fun getUserSpaceInfo(uid: Long): Result<SpaceInfo> {
+        return try {
+            val resp = api.getUserSpace(uid)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取用户信息失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 用户作品分页列表（含视频/文章/音频） */
+    suspend fun getUserVideos(uid: Long, page: Int, size: Int = 20): Result<PageData<Video>> {
+        return try {
+            val resp = api.getUserVideos(uid, page, size)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取作品列表失败" }))
         } catch (e: Exception) { Result.failure(e) }
     }
 

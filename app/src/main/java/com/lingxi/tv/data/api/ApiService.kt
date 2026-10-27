@@ -194,6 +194,14 @@ interface ApiService {
     @GET("/api/v1/users/{id}")
     suspend fun getUserSpace(@Path("id") id: Long): ApiResponse<SpaceInfo>
 
+    /** 用户作品列表（含视频/文章/音频）：GET /users/{uid}/videos?page=&size= */
+    @GET("/api/v1/users/{uid}/videos")
+    suspend fun getUserVideos(
+        @Path("uid") uid: Long,
+        @Query("page") page: Int,
+        @Query("size") size: Int
+    ): ApiResponse<PageData<Video>>
+
     /** 更新昵称与签名：PATCH /users/me body */
     @HTTP(method = "PATCH", path = "/api/v1/users/me", hasBody = true)
     suspend fun updateMyProfile(

@@ -1,5 +1,6 @@
 ﻿package com.lingxi.tv.ui.player
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -26,6 +27,7 @@ import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoQuality
 import com.lingxi.tv.player.DanmakuView
 import com.lingxi.tv.player.VideoCacheManager
+import com.lingxi.tv.ui.space.UserSpaceActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -442,15 +444,24 @@ class PlayerActivity : AppCompatActivity() {
         options.add("画面比例: ${RESIZE_MODE_LABELS[currentResizeMode]}")
         options.add("弹幕: ${if (danmakuView.isDanmakuEnabled()) "开" else "关"}")
         options.add("循环: ${if (loopEnabled) "开" else "关"}")
+        // UP 主空间：读取当前视频发布者 UID 跳转其个人空间
+        val upUid = video?.uid ?: 0
+        if (upUid > 0) options.add("UP主空间")
 
         optionsDialog = AlertDialog.Builder(this)
             .setTitle("播放设置")
             .setItems(options.toTypedArray()) { _, which ->
-                when (which) {
-                    0 -> showQualityDialog()
-                    1 -> cycleResizeMode()
-                    2 -> toggleDanmaku()
-                    3 -> toggleLoop()
+                when (options[which]) {
+                    options[0] -> showQualityDialog()
+                    options[1] -> cycleResizeMode()
+                    options[2] -> toggleDanmaku()
+                    options[3] -> toggleLoop()
+                    else -> {
+                        startActivity(
+                            Intent(this, UserSpaceActivity::class.java)
+                                .putExtra(UserSpaceActivity.EXTRA_UID, upUid)
+                        )
+                    }
                 }
             }
             .setNegativeButton("关闭", null)

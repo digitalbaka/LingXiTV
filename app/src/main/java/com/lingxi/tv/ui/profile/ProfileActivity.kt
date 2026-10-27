@@ -23,6 +23,7 @@ import com.lingxi.tv.ui.auth.LoginActivity
 import com.lingxi.tv.ui.list.VideoListActivity
 import com.lingxi.tv.ui.message.MessageActivity
 import com.lingxi.tv.ui.settings.SettingsActivity
+import com.lingxi.tv.ui.space.UserSpaceActivity
 import kotlinx.coroutines.launch
 
 /**
@@ -63,6 +64,13 @@ class ProfileActivity : AppCompatActivity() {
         }
         btnCheckin.setOnClickListener { doCheckin() }
 
+        findViewById<TextView>(R.id.menuMySpace).setOnClickListener {
+            val uid = AuthManager.user?.id ?: 0
+            if (uid > 0) {
+                startActivity(Intent(this, UserSpaceActivity::class.java)
+                    .putExtra(UserSpaceActivity.EXTRA_UID, uid))
+            }
+        }
         findViewById<TextView>(R.id.menuHistory).setOnClickListener {
             openVideoList(VideoListActivity.TYPE_HISTORY)
         }

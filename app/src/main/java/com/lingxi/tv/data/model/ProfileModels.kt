@@ -34,7 +34,9 @@ data class MeUser(
     val emailBound: Boolean = false,
     val vip: Boolean = false,
     val vipTierLabel: String = "",
-    val checkedInToday: Boolean = false
+    val checkedInToday: Boolean = false,
+    /** 注册时间（毫秒时间戳），用于计算加入天数 */
+    val createdAt: Long = 0
 ) {
     fun getFullAvatarUrl(baseUrl: String): String = joinUrl(baseUrl, avatar)
 }

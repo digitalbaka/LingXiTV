@@ -50,14 +50,20 @@
             android:layout_marginTop="16dp" />
 
         <TextView
-            android:id="@+id/tvArticleBody"
+            android:id="@+id/tvArticleIntro"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/text_primary"
-            android:textSize="18sp"
-            android:lineSpacingMultiplier="1.5"
+            android:textColor="@color/text_secondary"
+            android:textSize="15sp"
+            android:lineSpacingMultiplier="1.4"
             android:padding="8dp"
-            android:layout_marginTop="8dp"
-            android:textIsSelectable="false" />
+            android:layout_marginTop="12dp" />
+
+        <LinearLayout
+            android:id="@+id/layoutArticleBody"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="4dp" />
     </LinearLayout>
 </ScrollView>

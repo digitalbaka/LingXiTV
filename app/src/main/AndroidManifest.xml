@@ -83,6 +83,12 @@
             android:theme="@style/Theme.LingXiTV.NoActionBar" />
 
         <activity
+            android:name=".ui.space.UserSpaceActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.LingXiTV.NoActionBar" />
+
+        <activity
             android:name=".ui.profile.ProfileActivity"
             android:exported="false"
             android:screenOrientation="landscape"

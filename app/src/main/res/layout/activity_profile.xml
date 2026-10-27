@@ -115,6 +115,7 @@
             android:orientation="vertical"
             android:layout_marginTop="16dp">
 
+            <TextView android:id="@+id/menuMySpace" style="@style/SettingsItem" android:text="我的空间" />
             <TextView android:id="@+id/menuHistory" style="@style/SettingsItem" android:text="观看历史" />
             <TextView android:id="@+id/menuFavorites" style="@style/SettingsItem" android:text="我的收藏夹" />
             <TextView android:id="@+id/menuFollowing" style="@style/SettingsItem" android:text="关注动态" />

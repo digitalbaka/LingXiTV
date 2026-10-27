@@ -42,6 +42,8 @@ data class Video(
     val uid: Long = 0,
     val title: String = "",
     val description: String = "",
+    /** 文章正文（Markdown，kind=article 时才有内容，与简介 description 是两个字段） */
+    val content: String = "",
     val cover: String = "",
     val src: String = "",
     val duration: Long = 0,
