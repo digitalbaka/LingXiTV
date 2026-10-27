@@ -36,6 +36,10 @@ object ApiClient {
 
     private const val TAG = "LingXiApi"
 
+    /** 可重试的服务端错误码（Bad Gateway 等上游抖动） */
+    private val RETRYABLE_HTTP_CODES = setOf(502, 503, 504)
+    private const val MAX_SERVER_RETRY = 3
+
     /** 专门用于刷新令牌的客户端：不带鉴权与 401 处理，避免刷新请求自身再触发刷新 */
     private val tokenClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -79,8 +83,8 @@ object ApiClient {
                 val newToken = result?.data?.accessToken
                 if (newToken.isNullOrEmpty()) return null
                 AuthManager.token = newToken
-                result.data?.refreshToken?.let { AuthManager.refreshToken = it }
-                result.data?.user?.let { AuthManager.user = it }
+                result.data.refreshToken?.let { AuthManager.refreshToken = it }
+                result.data.user?.let { AuthManager.user = it }
                 Log.i(TAG, "accessToken refreshed")
                 newToken
             }
@@ -112,6 +116,20 @@ object ApiClient {
             .connectionPool(okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES))
             // 自动重试：服务器 5xx / 连接失败 / SSL 超时，最多重试 2 次，间隔 1 秒
             .retryOnConnectionFailure(true)
+            // 主站上游抖动：偶发 502/503/504（Bad Gateway 说明请求没到应用层，重发安全），
+            // 自动重试最多 3 次，间隔递增（600ms/1200ms/1800ms）
+            .addInterceptor { chain ->
+                val request = chain.request()
+                var response = chain.proceed(request)
+                var attempt = 0
+                while (response.code in RETRYABLE_HTTP_CODES && attempt < MAX_SERVER_RETRY) {
+                    attempt++
+                    response.close()
+                    Thread.sleep(600L * attempt)
+                    response = chain.proceed(request)
+                }
+                response
+            }
             // 自动附加 Authorization 头
             .addInterceptor { chain ->
                 val original = chain.request()
