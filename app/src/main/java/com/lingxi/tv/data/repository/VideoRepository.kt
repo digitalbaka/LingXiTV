@@ -155,11 +155,11 @@ class VideoRepository {
             else Result.failure(Exception(resp.message.ifEmpty { "登录失败" }))
         } catch (e: HttpException) {
             // HTTP 400 等错误：解析错误体，检测两步验证要求
-            val errorResp = parseErrorBody<LoginResult>(e)
-            if (errorResp?.data?.mfaRequired == true) {
-                Result.success(errorResp.data!!)
+            val data = parseErrorBody<LoginResult>(e)?.data
+            if (data?.mfaRequired == true) {
+                Result.success(data)
             } else {
-                Result.failure(Exception(errorResp?.message?.ifEmpty { null } ?: "登录失败（HTTP ${e.code()}）"))
+                Result.failure(Exception(parseErrorBody<LoginResult>(e)?.message?.ifEmpty { null } ?: "登录失败（HTTP ${e.code()}）"))
             }
         } catch (e: Exception) {
             Result.failure(e)
