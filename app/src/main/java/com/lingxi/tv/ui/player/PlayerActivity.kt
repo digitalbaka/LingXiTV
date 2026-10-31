@@ -1,4 +1,4 @@
-﻿package com.lingxi.tv.ui.player
+﻿﻿package com.lingxi.tv.ui.player
 
 import android.content.Intent
 import android.net.Uri
@@ -388,6 +388,9 @@ class PlayerActivity : AppCompatActivity() {
             reHandoffTried = true
             nodeHandoffDone = false
             Log.w(TAG, "node playback failed, re-handoff: $errorMsg")
+            // 先清掉该地址可能存在的「毒缓存」：节点未授权时返回 HTTP 200 + {code:40301}
+            // JSON，CacheDataSource 误当视频流缓存，之后即便授权成功也永远命中它
+            currentPlayUrl()?.let { VideoCacheManager.evict(this, it) }
             Toast.makeText(this, "节点连接失败，正在重新授权…", Toast.LENGTH_SHORT).show()
             lifecycleScope.launch {
                 ensureNodeHandoff()

@@ -116,6 +116,19 @@ object VideoCacheManager {
     }
 
     /**
+     * 删除指定 URL 的缓存（SimpleCache 默认以 URL 字符串为 key）。
+     * 用于清除「毒缓存」：节点未授权时返回 HTTP 200 + {code:40301} JSON，
+     * CacheDataSource 无法识别为错误会当视频流永久缓存，之后即使重新授权成功
+     * 也永远命中这段 JSON 导致反复播放失败，必须在重试前清掉。
+     */
+    fun evict(context: Context, url: String) {
+        try {
+            getCache(context).removeResource(url)
+        } catch (_: Exception) {
+        }
+    }
+
+    /**
      * 清空视频磁盘缓存。必须在无播放器使用时调用（设置页中调用安全）。
      * 释放并重建 SimpleCache 以重新加目录锁。
      */
