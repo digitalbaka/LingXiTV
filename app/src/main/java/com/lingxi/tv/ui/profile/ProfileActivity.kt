@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -25,6 +26,9 @@ import com.lingxi.tv.ui.message.MessageActivity
 import com.lingxi.tv.ui.settings.SettingsActivity
 import com.lingxi.tv.ui.space.UserSpaceActivity
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * 我的页
@@ -41,6 +45,11 @@ class ProfileActivity : AppCompatActivity() {
     private lateinit var tvExp: TextView
     private lateinit var tvBio: TextView
     private lateinit var btnCheckin: Button
+    private lateinit var menuMessages: TextView
+
+    /** 大会员状态（bindProfile 时更新，VIP 弹窗展示用） */
+    private var isVip: Boolean = false
+    private var vipLabel: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,9 +89,11 @@ class ProfileActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.menuFollowing).setOnClickListener {
             openVideoList(VideoListActivity.TYPE_FOLLOWING)
         }
-        findViewById<TextView>(R.id.menuMessages).setOnClickListener {
+        findViewById<TextView>(R.id.menuMessages).also { menuMessages = it }.setOnClickListener {
             startActivity(Intent(this, MessageActivity::class.java))
         }
+        findViewById<TextView>(R.id.menuCoins).setOnClickListener { showCoins() }
+        findViewById<TextView>(R.id.menuVip).setOnClickListener { showVip() }
         // 管理员后台：本地 UID 鉴权，非管理员不显示
         val menuAdmin = findViewById<TextView>(R.id.menuAdmin)
         if (AuthManager.isAdmin) {
@@ -121,11 +132,105 @@ class ProfileActivity : AppCompatActivity() {
                 }
             }
         }
+        loadUnreadBadge()
+    }
+
+    /** 消息中心未读角标：失败时静默保持原文案 */
+    private fun loadUnreadBadge() {
+        lifecycleScope.launch {
+            repository.getNotificationSummary().onSuccess { s ->
+                menuMessages.text =
+                    if (s.unread > 0) "消息中心（${s.unread} 条未读）" else "消息中心"
+            }
+        }
+    }
+
+    /** 小鱼干：余额 + 近期变动明细 */
+    private fun showCoins() {
+        lifecycleScope.launch {
+            repository.getMyCoins().onSuccess { c ->
+                val sb = StringBuilder("余额：${c.coins} 条小鱼干")
+                if (c.recent.isNotEmpty()) {
+                    sb.append("\n\n近期变动：")
+                    val fmt = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+                    c.recent.take(10).forEach { log ->
+                        val sign = if (log.change >= 0) "+" else ""
+                        val time = if (log.createdAt > 0) "（${fmt.format(Date(log.createdAt))}）" else ""
+                        sb.append("\n$sign${log.change} · ${log.reason}$time")
+                    }
+                }
+                AlertDialog.Builder(this@ProfileActivity)
+                    .setTitle("我的小鱼干")
+                    .setMessage(sb.toString())
+                    .setPositiveButton("知道了", null)
+                    .show()
+            }.onFailure {
+                Toast.makeText(this@ProfileActivity, "获取失败：${it.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /** 大会员：状态 + 兑换记录，支持兑换码兑换 */
+    private fun showVip() {
+        lifecycleScope.launch {
+            repository.getVipMe().onSuccess { v ->
+                val sb = StringBuilder(
+                    if (isVip) "当前状态：${vipLabel.ifEmpty { "大会员" }}生效中"
+                    else "当前状态：未开通大会员"
+                )
+                if (v.history.isNotEmpty()) {
+                    sb.append("\n\n兑换记录：")
+                    val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                    v.history.take(5).forEach { r ->
+                        val time = if (r.createdAt > 0) "（${fmt.format(Date(r.createdAt))}）" else ""
+                        sb.append("\n${r.plan} · ${r.days}天$time")
+                    }
+                }
+                AlertDialog.Builder(this@ProfileActivity)
+                    .setTitle("大会员")
+                    .setMessage(sb.toString())
+                    .setPositiveButton("兑换兑换码") { _, _ -> showVipRedeemDialog() }
+                    .setNegativeButton("关闭", null)
+                    .show()
+            }.onFailure {
+                Toast.makeText(this@ProfileActivity, "获取会员状态失败：${it.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showVipRedeemDialog() {
+        val input = EditText(this).apply {
+            hint = "请输入兑换码"
+            setSingleLine()
+        }
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        input.setPadding(pad, pad, pad, pad)
+        AlertDialog.Builder(this)
+            .setTitle("兑换大会员")
+            .setView(input)
+            .setPositiveButton("兑换") { _, _ ->
+                val code = input.text.toString().trim()
+                if (code.isEmpty()) return@setPositiveButton
+                lifecycleScope.launch {
+                    repository.redeemVip(code).onSuccess {
+                        Toast.makeText(this@ProfileActivity, "兑换成功", Toast.LENGTH_SHORT).show()
+                        loadProfile()
+                    }.onFailure {
+                        Toast.makeText(this@ProfileActivity, "兑换失败：${it.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun bindProfile(p: UserProfile) {
+        isVip = p.vip
+        vipLabel = p.vipTierLabel
         tvNickname.text = p.nickname.ifEmpty { p.username }
-        tvMeta.text = "UID ${p.id} · LV${p.level} · ${p.followerCount} 粉丝 · ${p.followingCount} 关注" +
+        tvMeta.text = "UID ${p.id} · LV${p.level}" +
+            (if (p.vip) " · 👑${p.vipTierLabel.ifEmpty { "大会员" }}" else "") +
+            " · ${p.followerCount} 粉丝 · ${p.followingCount} 关注" +
             if (p.badgeLabel.isNotEmpty()) " · ${p.badgeLabel}" else ""
         tvExp.text = if (p.nextLevelExp > 0) "LV${p.level} · ${p.exp}/${p.nextLevelExp} 经验" else "LV${p.level} · ${p.exp} 经验"
         tvBio.text = p.bio

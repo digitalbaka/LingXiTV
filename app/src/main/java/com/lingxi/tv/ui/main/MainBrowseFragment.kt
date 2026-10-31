@@ -41,7 +41,9 @@ class MainBrowseFragment : BrowseSupportFragment() {
         var hasMore: Boolean = true,
         var loading: Boolean = false,
         var sort: String? = null,
-        var partition: String? = null
+        var partition: String? = null,
+        /** true 时走 /videos/recommend 兴趣推荐流，false 走 /videos 常规列表 */
+        var recommend: Boolean = false
     )
     private val pageStates = HashMap<Long, PageState>()
 
@@ -129,7 +131,17 @@ class MainBrowseFragment : BrowseSupportFragment() {
 
     private fun loadData() {
         lifecycleScope.launch {
-            addRow(HEADER_RECOMMEND, "推荐", sort = "hot")
+            // 全站置顶：有内容时才显示该行（置顶为管理运营位，可能为空）
+            repository.getPinned().onSuccess { pinned ->
+                val items = pinned.filter { it.isVideo || it.isAudio || it.isArticle }
+                if (items.isNotEmpty()) {
+                    val adapter = ArrayObjectAdapter(VideoCardPresenter())
+                    items.forEach { adapter.add(it) }
+                    rowsAdapter.add(ListRow(HeaderItem(HEADER_PINNED, "置顶"), adapter))
+                }
+            }
+
+            addRow(HEADER_RECOMMEND, "推荐", recommend = true)
             addRow(HEADER_NEWEST, "最新", sort = "new")
 
             // 排行榜
@@ -185,6 +197,17 @@ class MainBrowseFragment : BrowseSupportFragment() {
                 startActivity(Intent(requireContext(), NodeSelectActivity::class.java))
             })
         }
+        // 站内状态：无需登录，点击实时查询在线/在看人数
+        adapter.add(MenuAction("站内状态") {
+            lifecycleScope.launch {
+                repository.getSiteStats().onSuccess { s ->
+                    Toast.makeText(requireContext(),
+                        "当前 ${s.online} 人在线 · ${s.watching} 人正在观看", Toast.LENGTH_SHORT).show()
+                }.onFailure {
+                    Toast.makeText(requireContext(), "获取站点状态失败", Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
         rowsAdapter.add(ListRow(headerItem, adapter))
     }
 
@@ -240,6 +263,7 @@ class MainBrowseFragment : BrowseSupportFragment() {
         name: String,
         sort: String? = null,
         partition: String? = null,
+        recommend: Boolean = false,
         onLoaded: (() -> Unit)? = null
     ) {
         val headerItem = HeaderItem(headerId, name)
@@ -251,7 +275,7 @@ class MainBrowseFragment : BrowseSupportFragment() {
             // 自定义加载（排行榜/历史/收藏/关注）
             onLoaded.invoke()
         } else {
-            pageStates[headerId] = PageState(sort = sort, partition = partition)
+            pageStates[headerId] = PageState(sort = sort, partition = partition, recommend = recommend)
             loadPage(listRow, headerId)
         }
     }
@@ -282,12 +306,16 @@ class MainBrowseFragment : BrowseSupportFragment() {
 
         lifecycleScope.launch {
             try {
-                val result = repository.getVideos(
-                    page = state.currentPage,
-                    pageSize = PAGE_SIZE,
-                    sort = state.sort,
-                    partition = state.partition
-                )
+                val result = if (state.recommend) {
+                    repository.getRecommend(page = state.currentPage, pageSize = PAGE_SIZE)
+                } else {
+                    repository.getVideos(
+                        page = state.currentPage,
+                        pageSize = PAGE_SIZE,
+                        sort = state.sort,
+                        partition = state.partition
+                    )
+                }
                 result.onSuccess { pageData ->
                     val beforeSize = innerAdapter.size()
                     pageData.items.filter { it.isVideo || it.isAudio || it.isArticle }.forEach { video ->
@@ -310,6 +338,7 @@ class MainBrowseFragment : BrowseSupportFragment() {
         private const val TAG = "LingXiBrowse"
         private const val HEADER_RECOMMEND = 1L
         private const val HEADER_NEWEST = 2L
+        private const val HEADER_PINNED = 3L
         private const val HEADER_ACCOUNT = 50L
         private const val HEADER_RANKING = 60L
         private const val HEADER_HISTORY = 61L

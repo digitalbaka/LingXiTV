@@ -85,7 +85,9 @@ data class UserProfile(
     val historyCount: Int = 0,
     val checkedIn: Boolean = false,
     val badgeLabel: String = "",
-    val isAdmin: Boolean = false
+    val isAdmin: Boolean = false,
+    val vip: Boolean = false,
+    val vipTierLabel: String = ""
 ) {
     fun getFullAvatarUrl(baseUrl: String): String = joinUrl(baseUrl, avatar)
 }

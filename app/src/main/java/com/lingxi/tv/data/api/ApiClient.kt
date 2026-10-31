@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
+import com.lingxi.tv.BuildConfig
 import com.lingxi.tv.data.auth.AuthManager
 import com.lingxi.tv.data.model.ApiResponse
 import com.lingxi.tv.data.model.LoginResult
@@ -107,7 +108,10 @@ object ApiClient {
 
     private val okHttpClient: OkHttpClient by lazy {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            // release 包关闭请求体日志：BODY 级别会把整个 JSON 读进内存并拼字符串，
+            // 电视内存有限且日志无人查看；debug 保留完整输出便于抓包调试
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+            else HttpLoggingInterceptor.Level.NONE
         }
         val builder = OkHttpClient.Builder()
             .connectTimeout(CONNECT_TIMEOUT, TimeUnit.SECONDS)

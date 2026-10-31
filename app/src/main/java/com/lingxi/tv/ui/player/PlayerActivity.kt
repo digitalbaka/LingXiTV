@@ -15,6 +15,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
@@ -27,6 +28,7 @@ import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoQuality
 import com.lingxi.tv.player.DanmakuView
 import com.lingxi.tv.player.VideoCacheManager
+import com.lingxi.tv.ui.list.VideoListActivity
 import com.lingxi.tv.ui.space.UserSpaceActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -97,6 +99,18 @@ class PlayerActivity : AppCompatActivity() {
 
     private var progressUpdateJob: Job? = null
     private var optionsDialog: AlertDialog? = null
+
+    // ==================== 互动状态（点赞/投喂/收藏/关注） ====================
+    private var liked: Boolean = false
+    /** 我在本视频已投喂的小鱼干数量（单稿上限 2） */
+    private var coined: Int = 0
+    private var faved: Boolean = false
+    private var followingUp: Boolean = false
+    /** 正在观看人数（进入页面拉一次，菜单里可手动刷新） */
+    private var viewersCount: Int = 0
+
+    /** 播放量/观看进度上报协程 */
+    private var reportJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -227,8 +241,18 @@ class PlayerActivity : AppCompatActivity() {
                     return@onSuccess
                 }
                 video = v
+                // 从详情初始化互动状态（viewer 仅登录时返回，未登录保持默认 false/0）
+                v.viewer?.let { viewer ->
+                    liked = viewer.liked
+                    coined = viewer.coined
+                    faved = viewer.faved
+                }
+                followingUp = detail.following
+                viewersCount = 0
                 setupPlayer(v)
                 loadDanmaku(videoId)
+                refreshViewers()
+                startReporting()
             }.onFailure {
                 Toast.makeText(this@PlayerActivity, "加载失败: ${it.message}", Toast.LENGTH_SHORT).show()
             }
@@ -286,7 +310,14 @@ class PlayerActivity : AppCompatActivity() {
         }
         Log.d(TAG, "play videoId=${video.id} url=$videoUrl")
 
-        player = ExoPlayer.Builder(this).build().also { exoPlayer ->
+        player = ExoPlayer.Builder(this)
+            // 缩小缓冲时长：电视内存有限，默认 50s 缓冲太占内存
+            .setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(15_000, 30_000, 1_500, 3_000)
+                    .build()
+            )
+            .build().also { exoPlayer ->
             playerView.player = exoPlayer
             exoPlayer.setMediaSource(buildMediaSource(videoUrl))
             exoPlayer.prepare()
@@ -432,7 +463,8 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * 显示设置菜单：清晰度、画面比例、弹幕开关
+     * 显示设置菜单：清晰度/画面比例/弹幕/循环 + 互动（点赞/投喂/收藏/关注）
+     * + UP主空间/相关视频/正在观看人数
      */
     private fun showOptionsDialog() {
         // 已有对话框则不重复弹出
@@ -440,33 +472,186 @@ class PlayerActivity : AppCompatActivity() {
             if (it.isShowing) return
         }
         val options = mutableListOf<String>()
+        val actions = mutableListOf<() -> Unit>()
+
         options.add("清晰度: ${qualityList.getOrNull(currentQualityIndex)?.label ?: "默认"}")
+        actions.add { showQualityDialog() }
         options.add("画面比例: ${RESIZE_MODE_LABELS[currentResizeMode]}")
+        actions.add { cycleResizeMode() }
         options.add("弹幕: ${if (danmakuView.isDanmakuEnabled()) "开" else "关"}")
+        actions.add { toggleDanmaku() }
         options.add("循环: ${if (loopEnabled) "开" else "关"}")
-        // UP 主空间：读取当前视频发布者 UID 跳转其个人空间
-        val upUid = video?.uid ?: 0
-        if (upUid > 0) options.add("UP主空间")
+        actions.add { toggleLoop() }
+
+        val v = video
+        val upUid = v?.up?.id ?: v?.uid ?: 0
+        // 互动项需要登录，未登录时不显示（服务端要求 Bearer）
+        if (v != null && AuthManager.isLoggedIn) {
+            options.add(if (liked) "已点赞 ✓" else "点赞")
+            actions.add { doLike() }
+            options.add(if (coined > 0) "投喂小鱼干（已投 $coined/2）" else "投喂小鱼干")
+            actions.add { doCoin() }
+            options.add(if (faved) "已收藏 ✓" else "收藏")
+            actions.add { doFavorite() }
+            // 自己的视频不显示关注入口
+            if (upUid > 0 && upUid != AuthManager.user?.id) {
+                options.add(if (followingUp) "已关注 UP 主 ✓" else "关注 UP 主")
+                actions.add { doFollowUp(upUid) }
+            }
+        }
+        if (upUid > 0) {
+            options.add("UP主空间")
+            actions.add {
+                startActivity(
+                    Intent(this, UserSpaceActivity::class.java)
+                        .putExtra(UserSpaceActivity.EXTRA_UID, upUid)
+                )
+            }
+        }
+        if (v != null) {
+            options.add("相关视频")
+            actions.add { openRelated() }
+            options.add(if (viewersCount > 0) "正在观看：$viewersCount 人" else "正在观看：点击查询")
+            actions.add { refreshViewers(showToast = true) }
+        }
 
         optionsDialog = AlertDialog.Builder(this)
             .setTitle("播放设置")
             .setItems(options.toTypedArray()) { _, which ->
-                when (options[which]) {
-                    options[0] -> showQualityDialog()
-                    options[1] -> cycleResizeMode()
-                    options[2] -> toggleDanmaku()
-                    options[3] -> toggleLoop()
-                    else -> {
-                        startActivity(
-                            Intent(this, UserSpaceActivity::class.java)
-                                .putExtra(UserSpaceActivity.EXTRA_UID, upUid)
-                        )
-                    }
-                }
+                actions.getOrNull(which)?.invoke()
             }
             .setNegativeButton("关闭", null)
             .create()
         optionsDialog?.show()
+    }
+
+    // ==================== 互动操作 ====================
+
+    private fun doLike() {
+        val v = video ?: return
+        lifecycleScope.launch {
+            repository.likeVideo(v.id).onSuccess { r ->
+                liked = r.liked
+                Toast.makeText(this@PlayerActivity,
+                    if (r.liked) "已点赞" else "已取消点赞", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(this@PlayerActivity, "操作失败：${it.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun doCoin() {
+        val v = video ?: return
+        if (coined >= 2) {
+            Toast.makeText(this, "这个视频已经投喂过啦", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            repository.coinVideo(v.id, 1).onSuccess { r ->
+                coined = r.coined
+                Toast.makeText(this@PlayerActivity,
+                    "投喂成功！剩余小鱼干 ${r.coins}", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(this@PlayerActivity, "投喂失败：${it.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun doFavorite() {
+        val v = video ?: return
+        if (faved) {
+            Toast.makeText(this, "已收藏，可在「我的收藏」中管理", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            repository.favoriteVideo(v.id).onSuccess {
+                faved = true
+                Toast.makeText(this@PlayerActivity, "已收藏", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(this@PlayerActivity, "收藏失败：${it.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun doFollowUp(uid: Long) {
+        lifecycleScope.launch {
+            repository.toggleFollowUser(uid).onSuccess { r ->
+                followingUp = r.following
+                Toast.makeText(this@PlayerActivity,
+                    if (r.following) "已关注" else "已取消关注", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(this@PlayerActivity, "操作失败：${it.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun openRelated() {
+        val v = video ?: return
+        startActivity(
+            Intent(this, VideoListActivity::class.java)
+                .putExtra(VideoListActivity.EXTRA_TYPE, VideoListActivity.TYPE_RELATED)
+                .putExtra(VideoListActivity.EXTRA_VIDEO_ID, v.id)
+        )
+    }
+
+    /** 拉取正在观看人数；showToast=true 时用 Toast 展示结果（菜单点击） */
+    private fun refreshViewers(showToast: Boolean = false) {
+        val v = video ?: return
+        lifecycleScope.launch {
+            repository.getViewers(v.id).onSuccess { count ->
+                viewersCount = count
+                if (showToast) {
+                    Toast.makeText(this@PlayerActivity,
+                        "当前 $count 人正在观看", Toast.LENGTH_SHORT).show()
+                }
+            }.onFailure {
+                if (showToast) {
+                    Toast.makeText(this@PlayerActivity, "获取观看人数失败", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // ==================== 播放上报 ====================
+
+    /**
+     * 进入播放即上报一次播放量，之后每 15s 上报观看进度（登录时写入历史），
+     * 每 30s 再补一次播放量上报（服务端按独立观众幂等计数）。
+     */
+    private fun startReporting() {
+        stopReporting()
+        val v = video ?: return
+        reportJob = lifecycleScope.launch {
+            repository.reportView(v.id, 0, 0)
+            var tick = 0
+            while (isActive) {
+                delay(15_000)
+                tick++
+                val pos = player?.currentPosition ?: continue
+                val dur = player?.duration?.takeIf { it > 0 } ?: 0
+                if (AuthManager.isLoggedIn && dur > 0) {
+                    repository.reportHistory(v.id, pos, dur)
+                }
+                if (tick % 2 == 0) {
+                    repository.reportView(v.id, pos, dur)
+                }
+            }
+        }
+    }
+
+    private fun stopReporting() {
+        reportJob?.cancel()
+        reportJob = null
+    }
+
+    /** 退出前终报一次观看进度，保证历史记录不丢 */
+    private fun reportHistoryOnce() {
+        val v = video ?: return
+        if (!AuthManager.isLoggedIn) return
+        val pos = player?.currentPosition ?: return
+        val dur = player?.duration ?: 0
+        if (pos <= 0 || dur <= 0) return
+        lifecycleScope.launch { repository.reportHistory(v.id, pos, dur) }
     }
 
     /**
@@ -580,6 +765,8 @@ class PlayerActivity : AppCompatActivity() {
         player?.pause()
         danmakuView.setPlaying(false)
         stopProgressUpdate()
+        stopReporting()
+        reportHistoryOnce()
     }
 
     override fun onResume() {
@@ -589,11 +776,14 @@ class PlayerActivity : AppCompatActivity() {
         player?.play()
         danmakuView.setPlaying(true)
         startProgressUpdate()
+        // onPause 停了上报协程，这里恢复（协程内部幂等，重复启动会先取消旧的）
+        if (video != null) startReporting()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         stopProgressUpdate()
+        stopReporting()
         danmakuView.setPlaying(false)
         optionsDialog?.dismiss()
         optionsDialog = null

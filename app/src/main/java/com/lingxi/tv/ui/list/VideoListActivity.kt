@@ -30,16 +30,20 @@ class VideoListActivity : FragmentActivity() {
 
     companion object {
         const val EXTRA_TYPE = "extra_type"
+        /** TYPE_RELATED 专用：源视频 ID */
+        const val EXTRA_VIDEO_ID = "extra_video_id"
         const val TYPE_HISTORY = "history"
         const val TYPE_FAVORITES = "favorites"
         const val TYPE_FOLLOWING = "following"
         const val TYPE_RANKING = "ranking"
+        const val TYPE_RELATED = "related"
 
         private val TITLES = mapOf(
             TYPE_HISTORY to "历史记录",
             TYPE_FAVORITES to "我的收藏",
             TYPE_FOLLOWING to "关注动态",
-            TYPE_RANKING to "排行榜"
+            TYPE_RANKING to "排行榜",
+            TYPE_RELATED to "相关视频"
         )
     }
 
@@ -86,8 +90,8 @@ class VideoListActivity : FragmentActivity() {
     }
 
     private fun loadData() {
-        // 历史/收藏/关注需要登录
-        if (type != TYPE_RANKING && !AuthManager.isLoggedIn) {
+        // 历史/收藏/关注需要登录（排行榜/相关视频无需登录）
+        if (type != TYPE_RANKING && type != TYPE_RELATED && !AuthManager.isLoggedIn) {
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
             return
@@ -106,6 +110,13 @@ class VideoListActivity : FragmentActivity() {
                 TYPE_HISTORY -> repository.getHistory()
                 TYPE_FAVORITES -> repository.getFavorites()
                 TYPE_FOLLOWING -> repository.getFollowingVideos()
+                TYPE_RELATED -> {
+                    // 相关视频接口返回纯列表，包装成分页结构复用现有渲染
+                    val vid = intent.getLongExtra(EXTRA_VIDEO_ID, 0)
+                    repository.getRelatedVideos(vid).map { list ->
+                        PageData(items = list, total = list.size, page = 1, pageSize = list.size, hasMore = false)
+                    }
+                }
                 else -> repository.getRanking()
             }
             result.onSuccess { pageData ->

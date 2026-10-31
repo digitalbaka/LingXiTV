@@ -11,30 +11,45 @@ import com.lingxi.tv.data.model.ApiResponse
 import com.lingxi.tv.data.model.BanRequest
 import com.lingxi.tv.data.model.Captcha
 import com.lingxi.tv.data.model.CheckinResult
+import com.lingxi.tv.data.model.CoinRequest
+import com.lingxi.tv.data.model.CoinResult
+import com.lingxi.tv.data.model.CoinsOverview
 import com.lingxi.tv.data.model.Conversation
 import com.lingxi.tv.data.model.DanmakuList
 import com.lingxi.tv.data.model.FavoriteFolder
 import com.lingxi.tv.data.model.FavoriteRequest
 import com.lingxi.tv.data.model.FavoriteResult
+import com.lingxi.tv.data.model.FollowResult
 import com.lingxi.tv.data.model.GatewayInfo
 import com.lingxi.tv.data.model.HandleReportRequest
 import com.lingxi.tv.data.model.HandoffRequest
 import com.lingxi.tv.data.model.HandoffResult
 import com.lingxi.tv.data.model.HistoryItem
+import com.lingxi.tv.data.model.HistoryReportRequest
+import com.lingxi.tv.data.model.ItemList
+import com.lingxi.tv.data.model.LikeResult
 import com.lingxi.tv.data.model.LoginRequest
 import com.lingxi.tv.data.model.LoginResult
 import com.lingxi.tv.data.model.MeResponse
+import com.lingxi.tv.data.model.NotificationSummary
 import com.lingxi.tv.data.model.PageData
 import com.lingxi.tv.data.model.Partition
 import com.lingxi.tv.data.model.PinRequest
+import com.lingxi.tv.data.model.PresenceResult
 import com.lingxi.tv.data.model.ReviewRequest
 import com.lingxi.tv.data.model.RoleRequest
 import com.lingxi.tv.data.model.SearchResult
 import com.lingxi.tv.data.model.SendCodeRequest
+import com.lingxi.tv.data.model.SiteStats
 import com.lingxi.tv.data.model.SpaceInfo
 import com.lingxi.tv.data.model.Verify2faRequest
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoDetail
+import com.lingxi.tv.data.model.ViewReportRequest
+import com.lingxi.tv.data.model.ViewReportResult
+import com.lingxi.tv.data.model.ViewersResult
+import com.lingxi.tv.data.model.VipMe
+import com.lingxi.tv.data.model.VipRedeemRequest
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -62,6 +77,47 @@ interface ApiService {
         @Query("sort") sort: String? = null,
         @Query("partition") partition: String? = null
     ): ApiResponse<PageData<Video>>
+
+    /** 首页推荐流：登录用户按兴趣画像重排，访客走全局热度池 */
+    @GET("/api/v1/videos/recommend")
+    suspend fun getRecommend(
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 20
+    ): ApiResponse<PageData<Video>>
+
+    /** 全站置顶：管理员固定在首页顶部的视频/图文，空数组时前端回落常规推荐 */
+    @GET("/api/v1/videos/pinned")
+    suspend fun getPinned(@Query("limit") limit: Int = 12): ApiResponse<ItemList<Video>>
+
+    /** 相关视频推荐 */
+    @GET("/api/v1/videos/{id}/related")
+    suspend fun getRelatedVideos(
+        @Path("id") id: Long,
+        @Query("limit") limit: Int = 18
+    ): ApiResponse<ItemList<Video>>
+
+    /** 正在观看人数（以弹幕长连接为准） */
+    @GET("/api/v1/videos/{id}/viewers")
+    suspend fun getViewers(@Path("id") id: Long): ApiResponse<ViewersResult>
+
+    /** 播放量上报：按独立观众计，同人同稿只计一次，可放心周期性上报 */
+    @POST("/api/v1/videos/{id}/view")
+    suspend fun reportView(
+        @Path("id") id: Long,
+        @Body body: ViewReportRequest
+    ): ApiResponse<ViewReportResult>
+
+    /** 观看进度上报：写入观看历史 */
+    @POST("/api/v1/history")
+    suspend fun reportHistory(@Body body: HistoryReportRequest): ApiResponse<ActionResult>
+
+    /** 在线心跳：前台周期性调用，登录按 uid、游客按 IP 去重 */
+    @POST("/api/v1/presence")
+    suspend fun presence(@Body body: Map<String, Long>): ApiResponse<PresenceResult>
+
+    /** 站点概览：在线/在看人数 */
+    @GET("/api/v1/stats")
+    suspend fun getSiteStats(): ApiResponse<SiteStats>
 
     @GET("/api/v1/videos/{id}")
     suspend fun getVideoDetail(@Path("id") id: Long): ApiResponse<VideoDetail>
@@ -178,11 +234,20 @@ interface ApiService {
     @DELETE("/api/v1/favorites/items/{id}")
     suspend fun unfavoriteVideo(@Path("id") id: Long): ApiResponse<ActionResult>
 
-    /** 关注/取消关注 UP 主 */
-    @POST("/api/v1/follow")
-    suspend fun toggleFollow(
-        @Query("uid") uid: Long
-    ): ApiResponse<ActionResult>
+    /** 关注/取消关注 UP 主：POST /users/{id}/follow（再次调用即取消） */
+    @POST("/api/v1/users/{id}/follow")
+    suspend fun followUser(@Path("id") uid: Long): ApiResponse<FollowResult>
+
+    /** 点赞（切换） */
+    @POST("/api/v1/videos/{id}/like")
+    suspend fun likeVideo(@Path("id") id: Long): ApiResponse<LikeResult>
+
+    /** 投喂小鱼干：单稿上限 2 条 */
+    @POST("/api/v1/videos/{id}/coin")
+    suspend fun coinVideo(
+        @Path("id") id: Long,
+        @Body body: CoinRequest
+    ): ApiResponse<CoinResult>
 
     // ==================== 用户资料 ====================
 
@@ -211,6 +276,22 @@ interface ApiService {
     /** 每日签到：{ reward, streak } */
     @POST("/api/v1/users/me/checkin")
     suspend fun checkin(): ApiResponse<CheckinResult>
+
+    /** 小鱼干余额与近期变动：{ coins, level, recent } */
+    @GET("/api/v1/users/me/coins")
+    suspend fun getMyCoins(): ApiResponse<CoinsOverview>
+
+    /** 未读通知概览：{ unread, messages, lobby, byType } */
+    @GET("/api/v1/notifications/summary")
+    suspend fun getNotificationSummary(): ApiResponse<NotificationSummary>
+
+    /** 我的大会员状态与兑换记录：{ history, uploadMaxBytes } */
+    @GET("/api/v1/vip/me")
+    suspend fun getVipMe(): ApiResponse<VipMe>
+
+    /** 大会员兑换码兑换 */
+    @POST("/api/v1/vip/redeem")
+    suspend fun redeemVip(@Body body: VipRedeemRequest): ApiResponse<ActionResult>
 
     /** 修改密码 */
     @POST("/api/v1/users/me/password")

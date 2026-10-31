@@ -38,6 +38,19 @@ import com.lingxi.tv.data.model.SpaceInfo
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoDetail
 import com.lingxi.tv.data.model.BanRequest
+import com.lingxi.tv.data.model.CoinRequest
+import com.lingxi.tv.data.model.CoinResult
+import com.lingxi.tv.data.model.CoinsOverview
+import com.lingxi.tv.data.model.FollowResult
+import com.lingxi.tv.data.model.HistoryReportRequest
+import com.lingxi.tv.data.model.LikeResult
+import com.lingxi.tv.data.model.NotificationSummary
+import com.lingxi.tv.data.model.PresenceResult
+import com.lingxi.tv.data.model.SiteStats
+import com.lingxi.tv.data.model.ViewReportRequest
+import com.lingxi.tv.data.model.ViewReportResult
+import com.lingxi.tv.data.model.VipMe
+import com.lingxi.tv.data.model.VipRedeemRequest
 import retrofit2.HttpException
 
 /**
@@ -368,11 +381,149 @@ class VideoRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun toggleFollow(uid: Long): Result<ActionResult> {
+    /** 关注/取消关注 UP 主（再次调用即取消关注） */
+    suspend fun toggleFollowUser(uid: Long): Result<FollowResult> {
         return try {
-            val resp = api.toggleFollow(uid)
-            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
+            val resp = api.followUser(uid)
+            if (resp.isSuccess) Result.success(resp.data ?: FollowResult())
             else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // ==================== 互动（点赞/投币/收藏） ====================
+
+    /** 点赞（切换）：返回最新 liked/likeCount */
+    suspend fun likeVideo(id: Long): Result<LikeResult> {
+        return try {
+            val resp = api.likeVideo(id)
+            if (resp.isSuccess) Result.success(resp.data ?: LikeResult())
+            else Result.failure(Exception(resp.message.ifEmpty { "操作失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 投喂小鱼干：amount ∈ 1/2，单稿上限 2 条 */
+    suspend fun coinVideo(id: Long, amount: Int): Result<CoinResult> {
+        return try {
+            val resp = api.coinVideo(id, CoinRequest(amount))
+            if (resp.isSuccess) Result.success(resp.data ?: CoinResult())
+            else Result.failure(Exception(resp.message.ifEmpty { "投币失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // ==================== 播放上报与观看人数 ====================
+
+    /** 播放量上报：服务端按独立观众幂等计数，可周期性重复调用 */
+    suspend fun reportView(videoId: Long, progressMs: Long, durationMs: Long): Result<ViewReportResult> {
+        return try {
+            val resp = api.reportView(videoId, ViewReportRequest(progressMs, durationMs))
+            if (resp.isSuccess) Result.success(resp.data ?: ViewReportResult())
+            else Result.failure(Exception(resp.message.ifEmpty { "上报失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 观看进度上报：写入观看历史（需登录） */
+    suspend fun reportHistory(videoId: Long, progressMs: Long, durationMs: Long): Result<ActionResult> {
+        return try {
+            val resp = api.reportHistory(HistoryReportRequest(videoId, progressMs, durationMs))
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true))
+            else Result.failure(Exception(resp.message.ifEmpty { "上报失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 正在观看人数 */
+    suspend fun getViewers(videoId: Long): Result<Int> {
+        return try {
+            val resp = api.getViewers(videoId)
+            if (resp.isSuccess) Result.success(resp.data?.count ?: 0)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 相关视频推荐 */
+    suspend fun getRelatedVideos(videoId: Long, limit: Int = 18): Result<List<Video>> {
+        return try {
+            val resp = api.getRelatedVideos(videoId, limit)
+            if (resp.isSuccess) Result.success(resp.data?.items.orEmpty())
+            else Result.failure(Exception(resp.message.ifEmpty { "获取相关视频失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // ==================== 首页与站点状态 ====================
+
+    /** 全站置顶（空列表时前端回落常规推荐） */
+    suspend fun getPinned(limit: Int = 12): Result<List<Video>> {
+        return try {
+            val resp = api.getPinned(limit)
+            if (resp.isSuccess) Result.success(resp.data?.items.orEmpty())
+            else Result.failure(Exception(resp.message.ifEmpty { "获取置顶失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 首页推荐流：登录用户按兴趣画像重排，访客走全局热度池 */
+    suspend fun getRecommend(page: Int = 1, pageSize: Int = 20): Result<PageData<Video>> {
+        return try {
+            val resp = api.getRecommend(page, pageSize)
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取推荐失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 站点概览：在线/在看人数 */
+    suspend fun getSiteStats(): Result<SiteStats> {
+        return try {
+            val resp = api.getSiteStats()
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取站点状态失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 在线心跳：前台周期调用，保持「在线」状态 */
+    suspend fun sendPresence(videoId: Long = 0): Result<PresenceResult> {
+        return try {
+            val body = if (videoId > 0) mapOf("videoId" to videoId) else emptyMap()
+            val resp = api.presence(body)
+            if (resp.isSuccess) Result.success(resp.data ?: PresenceResult())
+            else Result.failure(Exception(resp.message.ifEmpty { "心跳失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // ==================== 我的页扩展 ====================
+
+    /** 小鱼干余额与近期变动 */
+    suspend fun getMyCoins(): Result<CoinsOverview> {
+        return try {
+            val resp = api.getMyCoins()
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取小鱼干失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 未读通知概览 */
+    suspend fun getNotificationSummary(): Result<NotificationSummary> {
+        return try {
+            val resp = api.getNotificationSummary()
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取通知失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 我的大会员状态与兑换记录 */
+    suspend fun getVipMe(): Result<VipMe> {
+        return try {
+            val resp = api.getVipMe()
+            if (resp.isSuccess && resp.data != null) Result.success(resp.data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取会员状态失败" }))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 大会员兑换码兑换 */
+    suspend fun redeemVip(code: String): Result<ActionResult> {
+        return try {
+            val resp = api.redeemVip(VipRedeemRequest(code))
+            if (resp.isSuccess) Result.success(resp.data ?: ActionResult(true, resp.message))
+            else Result.failure(Exception(resp.message.ifEmpty { "兑换失败" }))
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseErrorBody<ActionResult>(e)?.message ?: "兑换失败（HTTP ${e.code()}）"))
         } catch (e: Exception) { Result.failure(e) }
     }
 
@@ -449,7 +600,9 @@ class VideoRepository {
             historyCount = historyCount,
             checkedIn = checkedInToday,
             badgeLabel = badgeLabel,
-            isAdmin = isAdmin
+            isAdmin = isAdmin,
+            vip = vip,
+            vipTierLabel = vipTierLabel
         )
     }
 

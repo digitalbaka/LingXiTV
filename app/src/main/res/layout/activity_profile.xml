@@ -120,6 +120,8 @@
             <TextView android:id="@+id/menuFavorites" style="@style/SettingsItem" android:text="我的收藏夹" />
             <TextView android:id="@+id/menuFollowing" style="@style/SettingsItem" android:text="关注动态" />
             <TextView android:id="@+id/menuMessages" style="@style/SettingsItem" android:text="消息中心" />
+            <TextView android:id="@+id/menuCoins" style="@style/SettingsItem" android:text="我的小鱼干" />
+            <TextView android:id="@+id/menuVip" style="@style/SettingsItem" android:text="大会员" />
             <TextView android:id="@+id/menuAdmin" style="@style/SettingsItem" android:text="管理后台" android:visibility="gone" />
             <TextView android:id="@+id/menuAbout" style="@style/SettingsItem" android:text="关于本站" />
         </LinearLayout>

@@ -151,3 +151,112 @@ data class VideoDetail(
      */
     val progress: Any? = null
 )
+
+// ==================== 互动（点赞/投币/关注） ====================
+
+/** 仅含 items 的列表响应（置顶、相关视频等不分页接口） */
+data class ItemList<T>(
+    val items: List<T> = emptyList()
+)
+
+/** 点赞结果：POST /videos/{id}/like → { liked, likeCount } */
+data class LikeResult(
+    val liked: Boolean = false,
+    val likeCount: Int = 0
+)
+
+/** 投币请求：POST /videos/{id}/coin，单稿上限 2 条 */
+data class CoinRequest(val amount: Int)
+
+/** 投币结果：{ coined 我已投数量, coinCount 稿件总投币, coins 我的余额 } */
+data class CoinResult(
+    val coined: Int = 0,
+    val coinCount: Int = 0,
+    val coins: Long = 0
+)
+
+/** 关注结果：POST /users/{id}/follow */
+data class FollowResult(
+    val following: Boolean = false
+)
+
+// ==================== 播放上报 ====================
+
+/** 正在观看人数：GET /videos/{id}/viewers → { videoId, count } */
+data class ViewersResult(
+    val videoId: Long = 0,
+    val count: Int = 0
+)
+
+/** 播放量上报：POST /videos/{id}/view（服务端按独立观众幂等计数） */
+data class ViewReportRequest(
+    val progressMs: Long,
+    val durationMs: Long
+)
+
+data class ViewReportResult(
+    val viewCount: Long = 0
+)
+
+/** 观看进度上报：POST /history */
+data class HistoryReportRequest(
+    val videoId: Long,
+    val progressMs: Long,
+    val durationMs: Long
+)
+
+// ==================== 站点状态 ====================
+
+/** 站点概览：GET /stats → { online, watching, ... } */
+data class SiteStats(
+    val online: Int = 0,
+    val watching: Int = 0
+)
+
+/** 在线心跳：POST /presence → { online, watching, ts } */
+data class PresenceResult(
+    val online: Int = 0,
+    val watching: Int = 0
+)
+
+// ==================== 我的页扩展 ====================
+
+/** 小鱼干余额与近期变动：GET /users/me/coins → { coins, level, recent } */
+data class CoinsOverview(
+    val coins: Long = 0,
+    val recent: List<CoinLog> = emptyList()
+)
+
+data class CoinLog(
+    val reason: String = "",
+    val delta: Long = 0,
+    val amount: Long = 0,
+    val balanceAfter: Long = 0,
+    val createdAt: Long = 0
+) {
+    /** 变动量：不同版本字段名可能为 delta 或 amount */
+    val change: Long get() = if (delta != 0L) delta else amount
+}
+
+/** 未读通知概览：GET /notifications/summary → { unread, messages, lobby, byType } */
+data class NotificationSummary(
+    val unread: Int = 0,
+    val messages: Int = 0,
+    val lobby: Int = 0
+)
+
+/** 大会员状态与兑换记录：GET /vip/me → { history, uploadMaxBytes } */
+data class VipMe(
+    val uploadMaxBytes: Long = 0,
+    val history: List<VipRedeemRecord> = emptyList()
+)
+
+data class VipRedeemRecord(
+    val code: String = "",
+    val plan: String = "",
+    val days: Int = 0,
+    val createdAt: Long = 0
+)
+
+/** 大会员兑换请求：POST /vip/redeem */
+data class VipRedeemRequest(val code: String)
