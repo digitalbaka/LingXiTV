@@ -1,4 +1,4 @@
-﻿﻿package com.lingxi.tv.ui.player
+﻿package com.lingxi.tv.ui.player
 
 import android.content.Intent
 import android.net.Uri
