@@ -763,6 +763,31 @@ class PlayerActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
+    /** 后台时记录的续播位置（onStop 释放播放器，onStart 重建时续播用） */
+    private var resumePosition: Long = 0
+
+    override fun onStop() {
+        super.onStop()
+        // 电视 SoC 通常只允许同时硬解 1 路视频：后台继续 pause 持有的解码器会让前台
+        // 新开的播放器（播放器→UP主空间→点新视频）报 MediaCodecVideoRenderer error。
+        // 进入后台即彻底释放解码器，回到前台时在 onStart 按记录位置重建续播。
+        val p = player ?: return
+        resumePosition = p.currentPosition
+        p.release()
+        player = null
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // 从后台返回：重建播放器并续播到离开时的位置
+        val v = video
+        if (player == null && v != null) {
+            setupPlayer(v)
+            if (resumePosition > 0) player?.seekTo(resumePosition)
+            resumePosition = 0
+        }
+    }
+
     override fun onPause() {
         super.onPause()
         player?.pause()
