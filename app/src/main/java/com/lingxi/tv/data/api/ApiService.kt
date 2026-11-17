@@ -175,9 +175,11 @@ interface ApiService {
         @Body body: Verify2faRequest
     ): ApiResponse<LoginResult>
 
-    /** 刷新 Token */
+    /** 刷新 Token（无参数也要发 JSON `{}`，否则反代会按表单处理并返回 415） */
     @POST("/api/v1/auth/refresh")
-    suspend fun refreshToken(): ApiResponse<LoginResult>
+    suspend fun refreshToken(
+        @Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()
+    ): ApiResponse<LoginResult>
 
     // ==================== 双因素认证（TOTP）====================
 
@@ -203,11 +205,15 @@ interface ApiService {
 
     /** 重新生成一批恢复码（旧码立即失效，明文只返回这一次） */
     @POST("/api/v1/users/me/recovery-codes")
-    suspend fun regenerateRecoveryCodes(): ApiResponse<RecoveryCodesResult>
+    suspend fun regenerateRecoveryCodes(
+        @Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()
+    ): ApiResponse<RecoveryCodesResult>
 
     /** 退出登录 */
     @POST("/api/v1/auth/logout")
-    suspend fun logout(): ApiResponse<ActionResult>
+    suspend fun logout(
+        @Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()
+    ): ApiResponse<ActionResult>
 
     // ==================== 节点（线路）====================
 
@@ -270,11 +276,17 @@ interface ApiService {
 
     /** 关注/取消关注 UP 主：POST /users/{id}/follow（再次调用即取消） */
     @POST("/api/v1/users/{id}/follow")
-    suspend fun followUser(@Path("id") uid: Long): ApiResponse<FollowResult>
+    suspend fun followUser(
+        @Path("id") uid: Long,
+        @Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()
+    ): ApiResponse<FollowResult>
 
     /** 点赞（切换） */
     @POST("/api/v1/videos/{id}/like")
-    suspend fun likeVideo(@Path("id") id: Long): ApiResponse<LikeResult>
+    suspend fun likeVideo(
+        @Path("id") id: Long,
+        @Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()
+    ): ApiResponse<LikeResult>
 
     /** 投喂小鱼干：单稿上限 2 条 */
     @POST("/api/v1/videos/{id}/coin")
@@ -309,7 +321,9 @@ interface ApiService {
 
     /** 每日签到：{ reward, streak } */
     @POST("/api/v1/users/me/checkin")
-    suspend fun checkin(): ApiResponse<CheckinResult>
+    suspend fun checkin(
+        @Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()
+    ): ApiResponse<CheckinResult>
 
     /** 小鱼干余额与近期变动：{ coins, level, recent } */
     @GET("/api/v1/users/me/coins")
@@ -331,7 +345,8 @@ interface ApiService {
     @POST("/api/v1/users/me/password")
     suspend fun changePassword(
         @Query("oldPassword") oldPassword: String,
-        @Query("newPassword") newPassword: String
+        @Query("newPassword") newPassword: String,
+        @Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()
     ): ApiResponse<ActionResult>
 
     /** 消息会话列表：{ items:[{user,last,unread,updatedAt}], totalUnread } */

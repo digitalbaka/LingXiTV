@@ -1,5 +1,14 @@
 # 更新日志
 
+## v2.0 (2026-11-18)
+
+兼容性修复版本：修正一批无请求体的 POST 被服务端判为 415，并修复邮箱验证码通过后无法继续认证器验证的问题。
+
+### 修复
+
+- 🩹 **签到/点赞/关注等接口 HTTP 415**：`checkin`、`likeVideo`、`followUser`、`refreshToken`、`logout`、`regenerateRecoveryCodes`、`changePassword` 声明为 POST 却不带请求体，Retrofit 未设置 Content-Type，反代按表单处理后返回 415「请求格式不受支持」。现在统一补发 JSON `{}` 并携带 `application/json`
+- 🔐 **邮箱验证码通过后不跳认证器**：verify-2fa 返回「还需继续 TOTP」（`code: 0` 但无 token，或 4xx 错误体里带下一步结构）时，旧逻辑当作登录异常并停在邮箱步骤。现在严格按 `code === 0` 判定，识别到下一步会复用或更新 mfaTicket、清空输入、复位倒计时，自动切到认证器验证码界面，不再原地打转
+
 ## v1.9.5 (2026-11-18)
 
 双因素认证（TOTP）版本：按站点接入指南打通登录二次验证、认证器绑定与门禁自救流程。
