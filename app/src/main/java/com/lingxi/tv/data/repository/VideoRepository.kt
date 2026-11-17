@@ -67,6 +67,11 @@ import retrofit2.HttpException
  */
 class VideoRepository {
 
+    private companion object {
+        /** 发送验证码阶段被要求改走认证器时的兜底提示（界面据此切步骤） */
+        const val TOTP_REQUIRED_MSG = "该账号需要认证器（TOTP）验证码，请切换验证方式"
+    }
+
     private val api = ApiClient.apiService
 
     // 简单的内存缓存：分区列表变化不频繁，缓存一段时间
@@ -241,10 +246,18 @@ class VideoRepository {
                     captchaCode = captchaCode
                 )
             )
-            Result.success(resp.data ?: ActionResult(true, resp.message.ifEmpty { "已发送" }))
+            if (resp.isSuccess) {
+                Result.success(resp.data ?: ActionResult(true, resp.message.ifEmpty { "已发送" }))
+            } else {
+                Result.failure(Exception(resp.message.ifEmpty { "发送失败" }))
+            }
         } catch (e: HttpException) {
             val code = e.code()
-            val msg = parseErrorBody<ActionResult>(e)?.message
+            // 错误体可能不是 ActionResult 而是要求继续认证器验证的结构，一并解析
+            val body = parseErrorBody<LoginResult>(e)
+            val needTotp = body?.data?.mfaRequired == true || !body?.data?.mfaTicket.isNullOrEmpty()
+            val bodyMsg = body?.message.orEmpty()
+            val msg = if (bodyMsg.isNotEmpty()) bodyMsg else if (needTotp) TOTP_REQUIRED_MSG else null
             if (code in 500..599) Result.failure(Exception("服务器暂时不可用（HTTP $code），请稍后重试"))
             else Result.failure(Exception(msg?.ifEmpty { null } ?: "发送失败（HTTP $code）"))
         } catch (e: java.net.SocketTimeoutException) {
@@ -256,7 +269,13 @@ class VideoRepository {
         }
     }
 
-    /** 验证验证码/恢复码完成两步验证，返回 accessToken 与新的 deviceToken */
+    /**
+     * 验证验证码/恢复码完成两步验证，返回 accessToken 与新的 deviceToken。
+     *
+     * 成功判定严格按信封 code === 0；若 data 里没有 token 但带 mfaRequired/mfaTicket，
+     * 说明还需要继续下一步验证（例如邮箱码通过后账号仍要求认证器），
+     * 必须作为正常结果返回交给界面切步骤，不能当异常。
+     */
     suspend fun verify2fa(
         mfaTicket: String,
         code: String,
@@ -272,10 +291,26 @@ class VideoRepository {
                     rememberDevice = rememberDevice
                 )
             )
-            if (resp.data != null) Result.success(resp.data)
-            else Result.failure(Exception(resp.message.ifEmpty { "验证失败" }))
+            val data = resp.data
+            if (resp.isSuccess && data != null) {
+                if (!data.accessToken.isNullOrEmpty() || data.mfaRequired || !data.mfaTicket.isNullOrEmpty()) {
+                    Result.success(data)
+                } else {
+                    // code 0 但既无 token 也无下一步标记：把服务端 message 交回界面判断
+                    Result.failure(Exception(resp.message.ifEmpty { "验证失败" }))
+                }
+            } else Result.failure(Exception(resp.message.ifEmpty { "验证失败" }))
         } catch (e: HttpException) {
-            Result.failure(Exception(parseErrorBody<LoginResult>(e)?.message ?: "验证失败（HTTP ${e.code()}）"))
+            val body = parseErrorBody<LoginResult>(e)
+            val data = body?.data
+            // 4xx 错误体里也可能携带「下一步」结构（无 token，但要求 TOTP）
+            if (data != null && (data.mfaRequired || (data.accessToken.isNullOrEmpty() && !data.mfaTicket.isNullOrEmpty()))) {
+                Result.success(data.copy(mfaRequired = true, mfaTicket = data.mfaTicket ?: mfaTicket))
+            } else {
+                Result.failure(
+                    Exception(body?.message?.ifEmpty { null } ?: "验证失败（HTTP ${e.code()}）")
+                )
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }

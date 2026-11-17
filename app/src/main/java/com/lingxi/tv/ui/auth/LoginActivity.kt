@@ -62,6 +62,7 @@ class LoginActivity : AppCompatActivity() {
 
     private var mfaTicket: String? = null
     private var mfaMethod: String = METHOD_TOTP
+    private var canUseRecovery = false
     private var captcha: Captcha? = null
     private var countdownJob: Job? = null
     private var verifying = false
@@ -165,17 +166,27 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
+    /** 按响应字段决定验证方式，兼容旧服务端（无 mfaMethod 但给了脱敏邮箱） */
+    private fun resolveMethod(result: LoginResult): String = when {
+        result.mfaMethod == METHOD_EMAIL -> METHOD_EMAIL
+        result.mfaMethod.isNullOrEmpty() && !result.emailMasked.isNullOrEmpty() -> METHOD_EMAIL
+        else -> METHOD_TOTP
+    }
+
     /** 切换到两步验证卡片：mfaMethod 决定走认证器还是邮箱验证码 */
     private fun enter2fa(result: LoginResult) {
         btnLogin.isEnabled = true
+        verifying = false
+        btnVerify.isEnabled = true
+        // 换步骤时旧冷却作废，避免倒计时覆盖按钮文案
+        countdownJob?.cancel()
+        btnSendCode.isEnabled = true
+        btnSendCode.text = "发送验证码"
         showStatus(null)
-        mfaTicket = result.mfaTicket
-        mfaMethod = when {
-            result.mfaMethod == METHOD_EMAIL -> METHOD_EMAIL
-            // 兼容旧服务端：没有 mfaMethod 但给了脱敏邮箱，说明走邮箱验证码
-            result.mfaMethod.isNullOrEmpty() && !result.emailMasked.isNullOrEmpty() -> METHOD_EMAIL
-            else -> METHOD_TOTP
-        }
+        // 服务端没给新票据时沿用当前票据（例如邮箱码通过后要求继续 TOTP）
+        result.mfaTicket?.takeIf { it.isNotEmpty() }?.let { mfaTicket = it }
+        canUseRecovery = result.canUseRecovery
+        mfaMethod = resolveMethod(result)
         layoutLogin.visibility = View.GONE
         layout2fa.visibility = View.VISIBLE
         etTotpCode.setText("")
@@ -199,6 +210,54 @@ class LoginActivity : AppCompatActivity() {
             cbUseRecovery.isChecked = false
             applyRecoveryMode(false)
         }
+    }
+
+    /**
+     * 验证接口返回「还要继续下一步」时的处理：
+     * 步骤或票据有变化才切换（清空输入、复位倒计时）；
+     * 同一票据同一步骤则视为校验未通过，保留用户输入，避免清空后原地打转。
+     */
+    private fun enterNext2faStep(result: LoginResult) {
+        val nextMethod = resolveMethod(result)
+        val nextTicket = result.mfaTicket?.takeIf { it.isNotEmpty() } ?: mfaTicket
+        if (nextMethod == mfaMethod && nextTicket == mfaTicket) {
+            showStatus("验证未通过，请核对验证码后重试")
+            btnVerify.isEnabled = true
+            return
+        }
+        enter2fa(result)
+        if (nextMethod == METHOD_TOTP) {
+            showStatus("请继续输入认证器 App 中的 6 位验证码完成登录")
+        } else {
+            showStatus("请继续完成邮箱验证码验证")
+        }
+    }
+
+    /** 邮箱阶段被要求改用认证器：复用当前票据切到 TOTP 步骤 */
+    private fun switchToTotpStep() {
+        val ticket = mfaTicket
+        if (ticket.isNullOrEmpty()) {
+            btnVerify.isEnabled = true
+            showStatus("登录会话已失效，请返回重新登录")
+            return
+        }
+        enter2fa(
+            LoginResult(
+                mfaRequired = true,
+                mfaMethod = METHOD_TOTP,
+                mfaTicket = ticket,
+                canUseRecovery = canUseRecovery
+            )
+        )
+        showStatus("该账号需要认证器（TOTP）验证，请输入认证器 App 中的 6 位验证码")
+    }
+
+    /** 服务端提示改用认证器（而不是验证码错误）的文案识别 */
+    private fun isTotpRequiredMessage(msg: String): Boolean {
+        if (msg.contains("票据") || msg.contains("过期")) return false
+        val lower = msg.lowercase()
+        return lower.contains("totp") || lower.contains("authenticator") ||
+            msg.contains("认证器") || msg.contains("动态验证码") || msg.contains("双因素")
     }
 
     // ==================== 图形验证码 ====================
@@ -270,20 +329,25 @@ class LoginActivity : AppCompatActivity() {
                     startCountdown()
                 }
                 .onFailure { e ->
-                    btnSendCode.isEnabled = true
-                    btnSendCode.text = "发送验证码"
                     val msg = e.message ?: "发送失败"
-                    showStatus("发送失败：$msg")
-                    Toast.makeText(this@LoginActivity, "发送失败：$msg", Toast.LENGTH_LONG).show()
-                    // 判断失败原因：
-                    // - 图形验证码相关错误（400 + captcha 关键字）→ 刷新图形验证码，清空用户输入
-                    // - 服务器 5xx / 网络错误 → 不刷新，保持用户输入让其重试
-                    // - 票据无效 / 其他 → 不刷新
-                    val isCaptchaError = msg.contains("图形验证码") || msg.contains("captcha", ignoreCase = true) ||
-                        msg.contains("验证码不正确") || msg.contains("验证码已过期")
-                    if (isCaptchaError) {
-                        loadCaptcha()
-                        etCaptchaCode.setText("")
+                    if (isTotpRequiredMessage(msg)) {
+                        // 账号实际要求认证器：直接切步骤，不再提示发送失败
+                        switchToTotpStep()
+                    } else {
+                        btnSendCode.isEnabled = true
+                        btnSendCode.text = "发送验证码"
+                        showStatus("发送失败：$msg")
+                        Toast.makeText(this@LoginActivity, "发送失败：$msg", Toast.LENGTH_LONG).show()
+                        // 判断失败原因：
+                        // - 图形验证码相关错误（400 + captcha 关键字）→ 刷新图形验证码，清空用户输入
+                        // - 服务器 5xx / 网络错误 → 不刷新，保持用户输入让其重试
+                        // - 票据无效 / 其他 → 不刷新
+                        val isCaptchaError = msg.contains("图形验证码") || msg.contains("captcha", ignoreCase = true) ||
+                            msg.contains("验证码不正确") || msg.contains("验证码已过期")
+                        if (isCaptchaError) {
+                            loadCaptcha()
+                            etCaptchaCode.setText("")
+                        }
                     }
                 }
         }
@@ -341,11 +405,22 @@ class LoginActivity : AppCompatActivity() {
                 rememberDevice = if (mfaMethod == METHOD_EMAIL) cbRememberDevice.isChecked else true
             ).onSuccess { result ->
                 verifying = false
-                finishLogin(result)
+                if (result.mfaRequired && result.accessToken.isNullOrEmpty()) {
+                    // code===0 但无 token：服务端要求继续下一步（如邮箱码通过后仍需 TOTP）
+                    enterNext2faStep(result)
+                } else {
+                    finishLogin(result)
+                }
             }.onFailure { e ->
                 verifying = false
-                btnVerify.isEnabled = true
-                handleVerifyError(e.message ?: "验证失败")
+                val msg = e.message ?: "验证失败"
+                if (mfaMethod == METHOD_EMAIL && !useRecovery && isTotpRequiredMessage(msg)) {
+                    // 邮箱码已通过但服务端要求认证器验证：切步骤而不是弹错误
+                    switchToTotpStep()
+                } else {
+                    btnVerify.isEnabled = true
+                    handleVerifyError(msg)
+                }
             }
         }
     }
@@ -372,6 +447,11 @@ class LoginActivity : AppCompatActivity() {
 
     /** 保存登录状态（持久化 token，下次免登录）并进入主界面 */
     private fun finishLogin(result: LoginResult) {
+        if (result.mfaRequired && result.accessToken.isNullOrEmpty()) {
+            // 兜底：无 token 但要求继续验证的响应绝不能当成登录异常
+            enterNext2faStep(result)
+            return
+        }
         val token = result.accessToken
         val user = result.user
         if (token.isNullOrEmpty() || user == null) {
