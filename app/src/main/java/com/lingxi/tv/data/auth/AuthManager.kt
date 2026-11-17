@@ -15,6 +15,7 @@ object AuthManager {
     private const val PREFS_NAME = "lingxi_auth"
     private const val KEY_TOKEN = "token"
     private const val KEY_REFRESH_TOKEN = "refresh_token"
+    private const val KEY_DEVICE_TOKEN = "device_token"
     private const val KEY_USER = "user_json"
     private const val KEY_NODE_ID = "node_id"
     private const val KEY_NODE_URL = "node_url"
@@ -37,6 +38,16 @@ object AuthManager {
         get() = prefs.getString(KEY_REFRESH_TOKEN, null)
         set(value) {
             prefs.edit().putString(KEY_REFRESH_TOKEN, value).apply()
+        }
+
+    /**
+     * 可信设备令牌：登录时回传，verify-2fa 响应里更新。
+     * 仅对未绑定认证器的邮箱 2FA 账号有效，绑定了 TOTP 的账号每次登录仍必须输码。
+     */
+    var deviceToken: String?
+        get() = prefs.getString(KEY_DEVICE_TOKEN, null)
+        set(value) {
+            prefs.edit().putString(KEY_DEVICE_TOKEN, value).apply()
         }
 
     var user: User?
@@ -112,10 +123,16 @@ object AuthManager {
     }
 
     /** 保存登录状态（token + refreshToken + 用户信息持久化，下次启动免登录） */
-    fun saveLogin(newToken: String, newUser: User, newRefreshToken: String? = null) {
+    fun saveLogin(
+        newToken: String,
+        newUser: User,
+        newRefreshToken: String? = null,
+        newDeviceToken: String? = null
+    ) {
         token = newToken
         refreshToken = newRefreshToken
         user = newUser
+        if (!newDeviceToken.isNullOrEmpty()) deviceToken = newDeviceToken
     }
 
     fun logout() {
@@ -128,6 +145,7 @@ object AuthManager {
             .remove(KEY_TOKEN)
             .remove(KEY_REFRESH_TOKEN)
             .remove(KEY_USER)
+            .remove(KEY_DEVICE_TOKEN)
             .apply()
     }
 }

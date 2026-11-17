@@ -124,6 +124,11 @@
                 android:text="修改密码" />
 
             <TextView
+                android:id="@+id/tvSecurity"
+                style="@style/SettingsItem"
+                android:text="验证器（双因素认证）" />
+
+            <TextView
                 android:id="@+id/tvLogout"
                 style="@style/SettingsItem"
                 android:text="退出登录"

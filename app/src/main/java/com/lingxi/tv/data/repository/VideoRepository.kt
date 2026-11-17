@@ -31,10 +31,18 @@ import com.lingxi.tv.data.model.LoginResult
 import com.lingxi.tv.data.model.PageData
 import com.lingxi.tv.data.model.Partition
 import com.lingxi.tv.data.model.PinRequest
+import com.lingxi.tv.data.model.RecoveryCodesResult
 import com.lingxi.tv.data.model.ReviewRequest
 import com.lingxi.tv.data.model.RoleRequest
 import com.lingxi.tv.data.model.SearchResult
 import com.lingxi.tv.data.model.SpaceInfo
+import com.lingxi.tv.data.model.TotpDisableRequest
+import com.lingxi.tv.data.model.TotpDisableResult
+import com.lingxi.tv.data.model.TotpEnableRequest
+import com.lingxi.tv.data.model.TotpEnableResult
+import com.lingxi.tv.data.model.TotpSetupRequest
+import com.lingxi.tv.data.model.TotpSetupResult
+import com.lingxi.tv.data.model.TotpStatus
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoDetail
 import com.lingxi.tv.data.model.BanRequest
@@ -189,13 +197,13 @@ class VideoRepository {
 
     /**
      * 账号密码登录。
-     * 站点强制两步验证：正确的账号密码会返回 HTTP 400，错误体 data 中携带
-     * mfaRequired=true / mfaTicket / emailMasked —— 此时作为成功结果返回，
-     * 由界面跳转两步验证流程。
+     * 站点强制两步验证：服务器返回 200（或兼容旧实现的 400）+ data.mfaRequired=true，
+     * 附带 mfaTicket / mfaMethod / canUseRecovery，此时作为成功结果返回，
+     * 由界面进入验证码步骤，绝不能直接读 accessToken。
      */
     suspend fun login(username: String, password: String): Result<LoginResult> {
         return try {
-            val resp = api.login(LoginRequest(username, password))
+            val resp = api.login(LoginRequest(username, password, AuthManager.deviceToken))
             if (resp.data != null) Result.success(resp.data)
             else Result.failure(Exception(resp.message.ifEmpty { "登录失败" }))
         } catch (e: HttpException) {
@@ -248,14 +256,19 @@ class VideoRepository {
         }
     }
 
-    /** 验证邮箱验证码完成两步验证，返回 accessToken */
-    suspend fun verify2fa(mfaTicket: String, code: String, rememberDevice: Boolean): Result<LoginResult> {
+    /** 验证验证码/恢复码完成两步验证，返回 accessToken 与新的 deviceToken */
+    suspend fun verify2fa(
+        mfaTicket: String,
+        code: String,
+        useRecovery: Boolean = false,
+        rememberDevice: Boolean = true
+    ): Result<LoginResult> {
         return try {
             val resp = api.verify2fa(
                 Verify2faRequest(
                     ticket = mfaTicket,
                     code = code,
-                    useRecovery = false,
+                    useRecovery = useRecovery,
                     rememberDevice = rememberDevice
                 )
             )
@@ -266,6 +279,79 @@ class VideoRepository {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    // ==================== 双因素认证（TOTP）====================
+
+    /** 绑定状态 + 站点强制策略（门禁状态下仍可用，属于自救白名单） */
+    suspend fun getTotpStatus(): Result<TotpStatus> {
+        return try {
+            val resp = api.getTotpStatus()
+            val data = resp.data
+            if (resp.isSuccess && data != null) Result.success(data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取验证器状态失败" }))
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseErrorBody<TotpStatus>(e)?.message ?: "获取验证器状态失败（HTTP ${e.code()}）"))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 开始绑定：密码换二维码（qr 为 SVG 源码）与手输密钥 */
+    suspend fun setupTotp(password: String): Result<TotpSetupResult> {
+        return try {
+            val resp = api.setupTotp(TotpSetupRequest(password))
+            val data = resp.data
+            if (resp.isSuccess && data != null) Result.success(data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取二维码失败" }))
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseErrorBody<TotpSetupResult>(e)?.message ?: "获取二维码失败（HTTP ${e.code()}）"))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 确认绑定：输入 6 位码，响应携带 8 个一次性恢复码 */
+    suspend fun enableTotp(code: String): Result<TotpEnableResult> {
+        return try {
+            val resp = api.enableTotp(TotpEnableRequest(code))
+            val data = resp.data
+            if (resp.isSuccess && data != null) Result.success(data)
+            else Result.failure(Exception(resp.message.ifEmpty { "绑定失败" }))
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseErrorBody<TotpEnableResult>(e)?.message ?: "绑定失败（HTTP ${e.code()}）"))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 解绑：密码 + 当前有效验证码 */
+    suspend fun disableTotp(password: String, code: String): Result<TotpDisableResult> {
+        return try {
+            val resp = api.disableTotp(TotpDisableRequest(password, code))
+            if (resp.isSuccess) Result.success(resp.data ?: TotpDisableResult(false))
+            else Result.failure(Exception(resp.message.ifEmpty { "解绑失败" }))
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseErrorBody<TotpDisableResult>(e)?.message ?: "解绑失败（HTTP ${e.code()}）"))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 剩余恢复码数量 */
+    suspend fun getRecoveryCodes(): Result<RecoveryCodesResult> {
+        return try {
+            val resp = api.getRecoveryCodes()
+            val data = resp.data
+            if (resp.isSuccess && data != null) Result.success(data)
+            else Result.failure(Exception(resp.message.ifEmpty { "获取恢复码失败" }))
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseErrorBody<RecoveryCodesResult>(e)?.message ?: "获取恢复码失败（HTTP ${e.code()}）"))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** 重新生成恢复码（旧码立即作废，明文只返回这一次） */
+    suspend fun regenerateRecoveryCodes(): Result<RecoveryCodesResult> {
+        return try {
+            val resp = api.regenerateRecoveryCodes()
+            val data = resp.data
+            if (resp.isSuccess && data != null) Result.success(data)
+            else Result.failure(Exception(resp.message.ifEmpty { "生成恢复码失败" }))
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseErrorBody<RecoveryCodesResult>(e)?.message ?: "生成恢复码失败（HTTP ${e.code()}）"))
+        } catch (e: Exception) { Result.failure(e) }
     }
 
     /** 解析 HTTP 错误响应体为 ApiResponse 结构，提取服务器给出的 message/data */

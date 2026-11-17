@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_dark"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="36dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="账号安全"
+            android:textColor="@color/text_primary"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="双因素认证（TOTP 认证器）"
+            android:textColor="@color/text_secondary"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/tvGateNotice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="#1E2B24"
+            android:padding="16dp"
+            android:textColor="@color/lingxi_green_light"
+            android:textSize="16sp"
+            android:lineSpacingExtra="4dp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="认证器：加载中…"
+            android:textColor="@color/text_primary"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvRecovery"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
+
+        <!-- 已绑定：解绑 / 重新生成恢复码 -->
+        <LinearLayout
+            android:id="@+id/layoutBound"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="@color/card_bg"
+            android:orientation="vertical"
+            android:padding="8dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvDisable"
+                style="@style/SettingsItem"
+                android:text="解绑 / 更换认证器（密码 + 验证码，换绑会重置恢复码）" />
+
+            <TextView
+                android:id="@+id/tvRegenerate"
+                style="@style/SettingsItem"
+                android:text="重新生成恢复码（旧码立即作废）" />
+        </LinearLayout>
+
+        <!-- 未绑定：绑定流程 -->
+        <LinearLayout
+            android:id="@+id/layoutBind"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="@color/card_bg"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="绑定认证器"
+                android:textColor="@color/lingxi_green_light"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvBindHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="第一步：输入当前登录密码，获取二维码与密钥。"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:lineSpacingExtra="3dp" />
+
+            <EditText
+                android:id="@+id/etSetupPassword"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_edit_text"
+                android:paddingHorizontal="16dp"
+                android:hint="当前登录密码"
+                android:textColor="@color/text_primary"
+                android:textColorHint="#666666"
+                android:textSize="16sp"
+                android:imeOptions="actionDone"
+                android:inputType="textPassword"
+                android:maxLines="1" />
+
+            <Button
+                android:id="@+id/btnGetQr"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/btn_secondary"
+                android:text="获取二维码"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:focusable="true" />
+
+            <LinearLayout
+                android:id="@+id/layoutQr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="用认证器 App 扫码（Google / Microsoft Authenticator、1Password、Authy 等）"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp" />
+
+                <android.webkit.WebView
+                    android:id="@+id/wvQr"
+                    android:layout_width="300dp"
+                    android:layout_height="300dp"
+                    android:layout_marginTop="10dp"
+                    android:background="#FFFFFF" />
+
+                <TextView
+                    android:id="@+id/tvSecret"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="15sp"
+                    android:fontFamily="monospace"
+                    android:lineSpacingExtra="4dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:text="第二步：输入认证器 App 中显示的 6 位验证码"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp" />
+
+                <EditText
+                    android:id="@+id/etEnableCode"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_edit_text"
+                    android:paddingHorizontal="16dp"
+                    android:hint="6 位数字"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="#666666"
+                    android:textSize="22sp"
+                    android:letterSpacing="0.2"
+                    android:imeOptions="actionDone"
+                    android:inputType="number"
+                    android:maxLength="6"
+                    android:maxLines="1" />
+
+                <Button
+                    android:id="@+id/btnEnable"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/btn_primary"
+                    android:text="确认绑定"
+                    android:textColor="@android:color/white"
+                    android:textSize="17sp"
+                    android:focusable="true" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 恢复码：绑定成功 / 重新生成后展示，必须确认已抄写 -->
+        <LinearLayout
+            android:id="@+id/layoutRecovery"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="@color/card_bg"
+            android:orientation="vertical"
+            android:padding="24dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="一次性恢复码（只显示这一次）"
+                android:textColor="@color/lingxi_green_light"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="手机丢失或认证器 App 被删时，用其中任意一个代替 6 位验证码登录。每个只能用一次，请立即抄写到纸上妥善保管。"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:lineSpacingExtra="3dp" />
+
+            <TextView
+                android:id="@+id/tvRecoveryCodes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="#121212"
+                android:fontFamily="monospace"
+                android:padding="18dp"
+                android:textColor="@color/text_primary"
+                android:textSize="20sp"
+                android:letterSpacing="0.08"
+                android:lineSpacingExtra="10dp" />
+
+            <CheckBox
+                android:id="@+id/cbRecoveryAck"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:text="我已抄写并妥善保存这 8 个恢复码，知道它们只显示这一次"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:focusable="true" />
+
+            <Button
+                android:id="@+id/btnRecoveryDone"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/btn_primary"
+                android:text="完成"
+                android:textColor="@android:color/white"
+                android:textSize="17sp"
+                android:enabled="false"
+                android:focusable="true" />
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

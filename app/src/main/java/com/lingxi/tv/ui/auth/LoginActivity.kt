@@ -25,23 +25,31 @@ import kotlinx.coroutines.launch
 /**
  * 登录页（电视遥控器友好）
  *
- * 站点强制两步验证：
- * 1. 账号密码登录 → 服务器返回 400 + mfaTicket（Repository 已解析为成功结果）
- * 2. 切换到两步验证卡：图形验证码（SVG WebView 渲染）+ 邮箱验证码
- * 3. 发送验证码 → 发送到绑定邮箱，60 秒冷却后才能重发
- * 4. 验证并登录 → 获取 token 持久化，下次免登录
- * 「记住这台设备 30 天」勾选后，30 天内本设备登录不再需要邮箱验证码
+ * 1. 账号密码登录 → 响应 data.mfaRequired=true 时进入验证码步骤，
+ *    按 mfaMethod 分流：totp（认证器 6 位码 / 恢复码）或 email（图形验证码 + 邮箱验证码）
+ * 2. 邮箱验证码发送到绑定邮箱，60 秒冷却后才能重发；设备受信时可直接登录
+ * 3. 验证并登录 → 持久化 accessToken / refreshToken / deviceToken，下次免登录
  */
 class LoginActivity : AppCompatActivity() {
+
+    companion object {
+        private const val METHOD_TOTP = "totp"
+        private const val METHOD_EMAIL = "email"
+    }
 
     private val repository = LingXiApp.get().repository
 
     private lateinit var layoutLogin: LinearLayout
     private lateinit var layout2fa: LinearLayout
+    private lateinit var layoutTotp: LinearLayout
+    private lateinit var layoutEmail: LinearLayout
     private lateinit var etUsername: EditText
     private lateinit var etPassword: EditText
     private lateinit var btnLogin: Button
     private lateinit var tv2faNotice: TextView
+    private lateinit var tvTotpCodeLabel: TextView
+    private lateinit var etTotpCode: EditText
+    private lateinit var cbUseRecovery: CheckBox
     private lateinit var wvCaptcha: WebView
     private lateinit var etCaptchaCode: EditText
     private lateinit var btnRefreshCaptcha: Button
@@ -53,8 +61,10 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var tvStatus: TextView
 
     private var mfaTicket: String? = null
+    private var mfaMethod: String = METHOD_TOTP
     private var captcha: Captcha? = null
     private var countdownJob: Job? = null
+    private var verifying = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,10 +72,15 @@ class LoginActivity : AppCompatActivity() {
 
         layoutLogin = findViewById(R.id.layoutLogin)
         layout2fa = findViewById(R.id.layout2fa)
+        layoutTotp = findViewById(R.id.layoutTotp)
+        layoutEmail = findViewById(R.id.layoutEmail)
         etUsername = findViewById(R.id.etUsername)
         etPassword = findViewById(R.id.etPassword)
         btnLogin = findViewById(R.id.btnLogin)
         tv2faNotice = findViewById(R.id.tv2faNotice)
+        tvTotpCodeLabel = findViewById(R.id.tvTotpCodeLabel)
+        etTotpCode = findViewById(R.id.etTotpCode)
+        cbUseRecovery = findViewById(R.id.cbUseRecovery)
         wvCaptcha = findViewById(R.id.wvCaptcha)
         etCaptchaCode = findViewById(R.id.etCaptchaCode)
         btnRefreshCaptcha = findViewById(R.id.btnRefreshCaptcha)
@@ -90,8 +105,29 @@ class LoginActivity : AppCompatActivity() {
         btnSendCode.setOnClickListener { sendCode() }
         btnVerify.setOnClickListener { verifyAndLogin() }
         tvBackLogin.setOnClickListener { backToLogin() }
+        cbUseRecovery.setOnCheckedChangeListener { _, checked -> applyRecoveryMode(checked) }
 
         etUsername.requestFocus()
+    }
+
+    /** 切换「认证器验证码 / 恢复码」输入形态 */
+    private fun applyRecoveryMode(useRecovery: Boolean) {
+        if (useRecovery) {
+            tvTotpCodeLabel.text = "一次性恢复码（格式 A1B2-C3D4）"
+            etTotpCode.hint = "输入恢复码"
+            etTotpCode.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+            etTotpCode.filters = emptyArray()
+        } else {
+            tvTotpCodeLabel.text = "认证器验证码（6 位数字）"
+            etTotpCode.hint = "6 位数字"
+            etTotpCode.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            etTotpCode.filters = arrayOf<android.text.InputFilter>(
+                android.text.InputFilter.LengthFilter(6)
+            )
+        }
+        etTotpCode.setText("")
+        etTotpCode.requestFocus()
     }
 
     private fun showStatus(msg: String?) {
@@ -117,9 +153,8 @@ class LoginActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repository.login(username, password).onSuccess { result ->
                 if (result.mfaRequired) {
-                    // 站点强制两步验证：进入验证流程
-                    mfaTicket = result.mfaTicket
-                    enter2fa(result.emailMasked)
+                    // 密码正确 ≠ 拿到登录态：站点要求二次验证，切到验证码步骤
+                    enter2fa(result)
                 } else {
                     finishLogin(result)
                 }
@@ -130,17 +165,40 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    /** 切换到两步验证卡片 */
-    private fun enter2fa(emailMasked: String?) {
+    /** 切换到两步验证卡片：mfaMethod 决定走认证器还是邮箱验证码 */
+    private fun enter2fa(result: LoginResult) {
         btnLogin.isEnabled = true
         showStatus(null)
+        mfaTicket = result.mfaTicket
+        mfaMethod = when {
+            result.mfaMethod == METHOD_EMAIL -> METHOD_EMAIL
+            // 兼容旧服务端：没有 mfaMethod 但给了脱敏邮箱，说明走邮箱验证码
+            result.mfaMethod.isNullOrEmpty() && !result.emailMasked.isNullOrEmpty() -> METHOD_EMAIL
+            else -> METHOD_TOTP
+        }
         layoutLogin.visibility = View.GONE
         layout2fa.visibility = View.VISIBLE
-        tv2faNotice.text = "检测到这台设备尚未通过验证，为保护账号安全，请输入发送到 ${emailMasked ?: "绑定邮箱"} 的验证码完成登录。"
-        etCaptchaCode.setText("")
+        etTotpCode.setText("")
         etEmailCode.setText("")
-        loadCaptcha()
-        etCaptchaCode.requestFocus()
+        etCaptchaCode.setText("")
+
+        if (mfaMethod == METHOD_EMAIL) {
+            layoutEmail.visibility = View.VISIBLE
+            layoutTotp.visibility = View.GONE
+            tv2faNotice.text = "为保障账号安全，请完成邮箱二次验证。" +
+                "验证码将发送到 ${result.emailMasked ?: "绑定邮箱"}。"
+            loadCaptcha()
+            etCaptchaCode.requestFocus()
+        } else {
+            layoutEmail.visibility = View.GONE
+            layoutTotp.visibility = View.VISIBLE
+            tv2faNotice.text = "该账号已开启认证器（TOTP）双因素认证。" +
+                "请输入认证器 App 中显示的 6 位验证码；手机丢失时可勾选下方恢复码选项。"
+            // 还没生成过恢复码（或已用完）时不显示恢复码入口
+            cbUseRecovery.visibility = if (result.canUseRecovery) View.VISIBLE else View.GONE
+            cbUseRecovery.isChecked = false
+            applyRecoveryMode(false)
+        }
     }
 
     // ==================== 图形验证码 ====================
@@ -247,27 +305,68 @@ class LoginActivity : AppCompatActivity() {
     // ==================== 第三步：验证并登录 ====================
 
     private fun verifyAndLogin() {
+        if (verifying) return
         val ticket = mfaTicket
-        val code = etEmailCode.text.toString().trim()
         if (ticket.isNullOrEmpty()) {
             showStatus("登录会话已失效，请返回重新登录")
             return
         }
-        if (code.length != 6) {
-            showStatus("请输入 6 位邮箱验证码")
+        val useRecovery = mfaMethod == METHOD_TOTP && cbUseRecovery.isChecked
+        val rawCode = if (mfaMethod == METHOD_TOTP) {
+            etTotpCode.text.toString()
+        } else {
+            etEmailCode.text.toString()
+        }.trim()
+
+        if (useRecovery) {
+            // 恢复码格式 A1B2-C3D4，横线可省略、大小写不敏感
+            val normalized = rawCode.replace("-", "").replace(" ", "")
+            if (normalized.length != 8 || !normalized.all { it.isLetterOrDigit() }) {
+                showStatus("请输入 8 位恢复码，例如 A1B2-C3D4")
+                return
+            }
+        } else if (rawCode.length != 6 || !rawCode.all { it.isDigit() }) {
+            showStatus(if (mfaMethod == METHOD_TOTP) "请输入认证器 App 中的 6 位数字验证码" else "请输入 6 位邮箱验证码")
             return
         }
+
+        verifying = true
         btnVerify.isEnabled = false
         showStatus("验证中…")
         lifecycleScope.launch {
-            repository.verify2fa(ticket, code, cbRememberDevice.isChecked)
-                .onSuccess { result ->
-                    finishLogin(result)
-                }
-                .onFailure {
-                    btnVerify.isEnabled = true
-                    showStatus("验证失败：${it.message}")
-                }
+            repository.verify2fa(
+                mfaTicket = ticket,
+                code = rawCode,
+                useRecovery = useRecovery,
+                rememberDevice = if (mfaMethod == METHOD_EMAIL) cbRememberDevice.isChecked else true
+            ).onSuccess { result ->
+                verifying = false
+                finishLogin(result)
+            }.onFailure { e ->
+                verifying = false
+                btnVerify.isEnabled = true
+                handleVerifyError(e.message ?: "验证失败")
+            }
+        }
+    }
+
+    /**
+     * 验证失败提示：重点区分票据过期、验证码重放、恢复码无效。
+     * 一律不自动重试 —— 服务端对验证码有重放保护和限频，重试只会烧额度。
+     */
+    private fun handleVerifyError(message: String) {
+        when {
+            message.contains("票据") || message.contains("重新登录") -> {
+                backToLogin()
+                showStatus("登录票据已过期（5 分钟有效），请重新输入密码登录")
+            }
+            message.contains("已经用过") -> {
+                showStatus("$message\n请等待下一个验证码（约 30 秒）后再试，不要重复提交同一个码")
+            }
+            message.contains("恢复码") -> {
+                showStatus("$message\n请检查是否抄错，或改用认证器验证码登录")
+            }
+            else -> showStatus("验证失败：$message")
         }
     }
 
@@ -280,7 +379,8 @@ class LoginActivity : AppCompatActivity() {
             btnVerify.isEnabled = true
             return
         }
-        AuthManager.saveLogin(token, user, result.refreshToken)
+        // verify-2fa 响应里会更新 deviceToken；对 TOTP 账号它不生效，但照常保存
+        AuthManager.saveLogin(token, user, result.refreshToken, result.deviceToken)
         Toast.makeText(this, "登录成功，欢迎 ${user.nickname.ifEmpty { user.username }}", Toast.LENGTH_SHORT).show()
         setResult(RESULT_OK)
         finish()
@@ -288,6 +388,8 @@ class LoginActivity : AppCompatActivity() {
 
     private fun backToLogin() {
         countdownJob?.cancel()
+        verifying = false
+        btnVerify.isEnabled = true
         btnSendCode.isEnabled = true
         btnSendCode.text = "发送验证码"
         layout2fa.visibility = View.GONE

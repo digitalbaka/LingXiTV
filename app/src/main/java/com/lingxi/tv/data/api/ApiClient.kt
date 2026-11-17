@@ -3,9 +3,11 @@ package com.lingxi.tv.data.api
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.lingxi.tv.BuildConfig
 import com.lingxi.tv.data.auth.AuthManager
+import com.lingxi.tv.data.auth.TotpGate
 import com.lingxi.tv.data.model.ApiResponse
 import com.lingxi.tv.data.model.LoginResult
 import okhttp3.MediaType.Companion.toMediaType
@@ -118,6 +120,26 @@ object ApiClient {
             .readTimeout(READ_TIMEOUT, TimeUnit.SECONDS)
             .writeTimeout(WRITE_TIMEOUT, TimeUnit.SECONDS)
             .connectionPool(okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES))
+            // 门禁拦截：HTTP 403 且 data.code === "TOTP_REQUIRED"（封禁也是 403，必须认 data.code）
+            // 放在最外层，等重试/鉴权都结束后再看最终响应
+            .addInterceptor { chain ->
+                val response = chain.proceed(chain.request())
+                if (response.code == 403) {
+                    try {
+                        val body = response.peekBody(64 * 1024).string()
+                        val json = gson.fromJson(body, JsonObject::class.java)
+                        val data = json?.getAsJsonObject("data")
+                        if (data?.get("code")?.asString == "TOTP_REQUIRED") {
+                            val daysLeft = data.get("daysLeft")?.asInt ?: 0
+                            val deadline = data.get("deadline")?.asLong ?: 0L
+                            TotpGate.onRequired(daysLeft, deadline)
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "parse TOTP gate body failed: ${e.message}")
+                    }
+                }
+                response
+            }
             // 自动重试：服务器 5xx / 连接失败 / SSL 超时，最多重试 2 次，间隔 1 秒
             .retryOnConnectionFailure(true)
             // 主站上游抖动：偶发 502/503/504（Bad Gateway 说明请求没到应用层，重发安全），

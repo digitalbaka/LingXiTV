@@ -6,7 +6,9 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.lingxi.tv.LingXiApp
 import com.lingxi.tv.R
+import com.lingxi.tv.data.auth.AuthManager
 import com.lingxi.tv.ui.search.SearchActivity
+import com.lingxi.tv.ui.security.SecurityActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -32,6 +34,27 @@ class MainActivity : FragmentActivity() {
                 .commit()
         }
         startPresence()
+        checkSecurityGate()
+    }
+
+    /**
+     * 首屏门禁：已过宽限期且未绑定认证器时，直接引导去绑定页，
+     * 避免用户先看到半屏内容再被 403 拦下。
+     */
+    private fun checkSecurityGate() {
+        if (!AuthManager.isLoggedIn) return
+        lifecycleScope.launch {
+            repository.getTotpStatus().onSuccess { status ->
+                if (status.blocked) {
+                    startActivity(
+                        Intent(this@MainActivity, SecurityActivity::class.java)
+                            .putExtra(SecurityActivity.EXTRA_FORCE, true)
+                            .putExtra(SecurityActivity.EXTRA_DAYS_LEFT, status.daysLeft)
+                            .putExtra(SecurityActivity.EXTRA_DEADLINE, status.deadline)
+                    )
+                }
+            }
+        }
     }
 
     /** 每 60s 一次在线心跳（服务端 presence 窗口通常为分钟级） */

@@ -77,6 +77,12 @@
             android:theme="@style/Theme.LingXiTV.NoActionBar" />
 
         <activity
+            android:name=".ui.security.SecurityActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.LingXiTV.NoActionBar" />
+
+        <activity
             android:name=".ui.article.ArticleActivity"
             android:exported="false"
             android:screenOrientation="landscape"

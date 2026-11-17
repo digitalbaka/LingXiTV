@@ -20,6 +20,7 @@ import com.lingxi.tv.data.model.UserProfile
 import com.lingxi.tv.player.DanmakuSettings
 import com.lingxi.tv.player.VideoCacheManager
 import com.lingxi.tv.ui.node.NodeSelectActivity
+import com.lingxi.tv.ui.security.SecurityActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -66,6 +67,13 @@ class SettingsActivity : AppCompatActivity() {
         tvDanmakuSettings.setOnClickListener { showDanmakuSettingsDialog() }
         findViewById<TextView>(R.id.tvTheme).setOnClickListener { showThemeDialog() }
         findViewById<TextView>(R.id.tvChangePassword).setOnClickListener { showChangePasswordDialog() }
+        findViewById<TextView>(R.id.tvSecurity).setOnClickListener {
+            if (!AuthManager.isLoggedIn) {
+                Toast.makeText(this, "请先登录", Toast.LENGTH_SHORT).show()
+            } else {
+                startActivity(Intent(this, SecurityActivity::class.java))
+            }
+        }
         findViewById<TextView>(R.id.tvLogout).setOnClickListener { confirmLogout() }
 
         // 电视端遥控器初始焦点

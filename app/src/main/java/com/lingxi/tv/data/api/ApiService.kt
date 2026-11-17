@@ -36,12 +36,20 @@ import com.lingxi.tv.data.model.PageData
 import com.lingxi.tv.data.model.Partition
 import com.lingxi.tv.data.model.PinRequest
 import com.lingxi.tv.data.model.PresenceResult
+import com.lingxi.tv.data.model.RecoveryCodesResult
 import com.lingxi.tv.data.model.ReviewRequest
 import com.lingxi.tv.data.model.RoleRequest
 import com.lingxi.tv.data.model.SearchResult
 import com.lingxi.tv.data.model.SendCodeRequest
 import com.lingxi.tv.data.model.SiteStats
 import com.lingxi.tv.data.model.SpaceInfo
+import com.lingxi.tv.data.model.TotpDisableRequest
+import com.lingxi.tv.data.model.TotpDisableResult
+import com.lingxi.tv.data.model.TotpEnableRequest
+import com.lingxi.tv.data.model.TotpEnableResult
+import com.lingxi.tv.data.model.TotpSetupRequest
+import com.lingxi.tv.data.model.TotpSetupResult
+import com.lingxi.tv.data.model.TotpStatus
 import com.lingxi.tv.data.model.Verify2faRequest
 import com.lingxi.tv.data.model.Video
 import com.lingxi.tv.data.model.VideoDetail
@@ -170,6 +178,32 @@ interface ApiService {
     /** 刷新 Token */
     @POST("/api/v1/auth/refresh")
     suspend fun refreshToken(): ApiResponse<LoginResult>
+
+    // ==================== 双因素认证（TOTP）====================
+
+    /** 查询认证器绑定状态 + 站点强制策略 + 剩余恢复码数量（门禁状态下也可用） */
+    @GET("/api/v1/users/me/totp")
+    suspend fun getTotpStatus(): ApiResponse<TotpStatus>
+
+    /** 开始绑定：需要当前密码，返回 base32 密钥、otpauth URI 与二维码 SVG 源码 */
+    @POST("/api/v1/users/me/totp/setup")
+    suspend fun setupTotp(@Body body: TotpSetupRequest): ApiResponse<TotpSetupResult>
+
+    /** 确认绑定：输入 App 中 6 位码，响应里带 8 个一次性恢复码（只出现这一次） */
+    @POST("/api/v1/users/me/totp/enable")
+    suspend fun enableTotp(@Body body: TotpEnableRequest): ApiResponse<TotpEnableResult>
+
+    /** 解绑：密码 + 一枚有效验证码 */
+    @POST("/api/v1/users/me/totp/disable")
+    suspend fun disableTotp(@Body body: TotpDisableRequest): ApiResponse<TotpDisableResult>
+
+    /** 查询剩余恢复码数量（不返回码本身） */
+    @GET("/api/v1/users/me/recovery-codes")
+    suspend fun getRecoveryCodes(): ApiResponse<RecoveryCodesResult>
+
+    /** 重新生成一批恢复码（旧码立即失效，明文只返回这一次） */
+    @POST("/api/v1/users/me/recovery-codes")
+    suspend fun regenerateRecoveryCodes(): ApiResponse<RecoveryCodesResult>
 
     /** 退出登录 */
     @POST("/api/v1/auth/logout")
